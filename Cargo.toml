@@ -1,0 +1,25 @@
+[package]
+name = "board_crab"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "board_crab_lib"
+path = "src/lib.rs"
+
+[[bin]]
+name = "board_crab_bin"
+path = "src/main.rs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[profile.dev]
+overflow-checks = false
+
+[profile.bench]
+overflow-checks = false
+
+[profile.release]
+overflow-checks = false
