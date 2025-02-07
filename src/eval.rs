@@ -7,11 +7,20 @@ pub const VALUE_CHECKMATE: f32 = 1_000.0;
 pub const VALUE_CHECKMATE_MIN: f32 = 500.0;
 
 pub fn eval_to_str(eval: Value) -> String {
-    if eval.abs() >= VALUE_CHECKMATE {
+    if eval.abs() >= VALUE_CHECKMATE_MIN {
         let mate_move_count = VALUE_CHECKMATE - eval.abs();
-        format!("mate {}", if eval > 0.0 { mate_move_count as i64 } else { -mate_move_count as i64 })
+        let ply_till_mate = (mate_move_count * eval.signum()) as i64;
+        format!("mate {}", (ply_till_mate + 1) / 2)
     } else {
         eval.to_string()
+    }
+}
+
+pub fn decay_eval(eval: Value) -> Value {
+    if eval.abs() >= VALUE_CHECKMATE_MIN {
+        eval - eval.signum()
+    } else {
+        eval
     }
 }
 

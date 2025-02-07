@@ -75,7 +75,8 @@ fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound
 
         let mut next_board = board.clone();
         next_board.do_move(mv);
-        let next_eval = -extension_search(&next_board, search_info, -upper_bound, -lower_bound, depth_remaining - 1);
+        let base_next_eval = extension_search(&next_board, search_info, -upper_bound, -lower_bound, depth_remaining - 1);
+        let next_eval = decay_eval(-base_next_eval);
 
         if next_eval > best_eval {
             best_eval = next_eval;
@@ -133,7 +134,7 @@ pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Valu
 
             let next_result =
                 search(&next_board, search_info, -upper_bound, -lower_bound, depth_remaining - 1, depth_elapsed + 1);
-            let next_eval = -next_result.eval;
+            let next_eval = decay_eval(-next_result.eval);
 
             if next_eval > best_eval {
                 best_eval = next_eval;
