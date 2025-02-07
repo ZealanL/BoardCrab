@@ -101,9 +101,8 @@ pub fn can_castle(side: usize, board: &Board, team_idx: usize, is_in_check: bool
     true
 }
 
-// TODO: Using vector is slow, we should use a buffer instead
 pub fn generate_moves(board: &Board) -> Vec<Move> {
-    let mut moves: Vec<Move> = Vec::with_capacity(30);
+    let mut moves: Vec<Move> = Vec::with_capacity(50);
 
     let occ_team = board.occupancy[board.turn_idx];
     let occ_opp = board.occupancy[1 - board.turn_idx];
