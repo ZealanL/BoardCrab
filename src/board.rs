@@ -44,6 +44,16 @@ impl Move {
             move_type: MoveType::Normal
         }
     }
+
+    // NOTE: Only works if the move was created from the given board
+    pub fn is_capture(&self, board: &Board) -> bool {
+        match self.move_type {
+            MoveType::EnPassantCapture => true,
+            _ => {
+                (self.to & board.occupancy[1 - board.turn_idx]) != 0
+            }
+        }
+    }
 }
 
 impl std::fmt::Display for Move {

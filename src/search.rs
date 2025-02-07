@@ -43,13 +43,8 @@ pub struct SearchInfo {
     pub total_nodes: u64
 }
 
-fn is_extending_move(board: &Board, mv: &Move) -> bool{
-    match mv.move_type {
-        MoveType::EnPassantCapture | MoveType::Promotion => true,
-        _ => {
-            (mv.to & board.occupancy[1 - board.turn_idx]) != 0
-        }
-    }
+fn is_extending_move(board: &Board, mv: &Move) -> bool {
+    mv.is_capture(board) | (mv.move_type == MoveType::Promotion)
 }
 
 // Maximum depth to extend searches to
