@@ -200,7 +200,7 @@ impl Board {
         self.attacks[team_idx]
     }
 
-    pub fn do_move(&mut self, mv: Move) {
+    pub fn do_move(&mut self, mv: &Move) {
 
         // From: https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/Engine/BoardState/BoardState.cpp
         // Order: Left/Queen-side, Right/King-side
