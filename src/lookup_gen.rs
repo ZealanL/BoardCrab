@@ -230,5 +230,6 @@ pub fn init() {
         }
     }
 
+    println!("Initializing lookup tables...");
     println!(" > Done!");
 }
