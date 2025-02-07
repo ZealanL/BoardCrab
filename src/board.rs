@@ -214,6 +214,9 @@ impl Board {
             ]
         ];
 
+        const CASTLING_ROOK_FROM_COMBINED_MASK: BitMask =
+            CASTLING_ROOK_FROM_MASKS[0][0] | CASTLING_ROOK_FROM_MASKS[0][1] | CASTLING_ROOK_FROM_MASKS[1][0] | CASTLING_ROOK_FROM_MASKS[1][1];
+
         let inv_from = !mv.from;
         let inv_to = !mv.to;
 
@@ -249,10 +252,11 @@ impl Board {
             MoveType::Castle => {
                 // We are castling, find and move the rook
 
-                // This works because we cant castle with a vertical king move
-                let castle_left: bool = mv.to < mv.from;
-                let rook_from = CASTLING_ROOK_FROM_MASKS[self.turn_idx][castle_left as usize];
-                let rook_to = if castle_left { bm_shift(mv.to, 1, 0) } else { bm_shift(mv.to, -1, 0) };
+                let castle_right: bool = mv.to > mv.from; // This works because we cant castle with a vertical king move
+
+                let rook_from = CASTLING_ROOK_FROM_MASKS[self.turn_idx][castle_right as usize];
+                let rook_to = if castle_right { bm_shift(mv.to, -1, 0) } else { bm_shift(mv.to, 1, 0) };
+
                 debug_assert!(self.pieces[self.turn_idx][PIECE_ROOK] & rook_from == rook_from);
                 debug_assert!(self.combined_occupancy() & rook_to == 0);
 
@@ -269,11 +273,16 @@ impl Board {
         if mv.from_piece_idx == PIECE_KING {
             // Castling is now banned
             self.castle_rights[self.turn_idx] = [false; 2];
-        } else {
-            // Detect rook move
+        }
+
+        // Detect move that disables castling
+        let combined_to_from = mv.to | mv.from;
+        if (combined_to_from & CASTLING_ROOK_FROM_COMBINED_MASK) != 0 {
             for i in 0..2 {
-                if mv.from == CASTLING_ROOK_FROM_MASKS[self.turn_idx][i] {
-                    self.castle_rights[self.turn_idx][i] = false;
+                for j in 0..2 {
+                    if (combined_to_from & CASTLING_ROOK_FROM_MASKS[i][j]) != 0 {
+                        self.castle_rights[i][j] = false;
+                    }
                 }
             }
         }

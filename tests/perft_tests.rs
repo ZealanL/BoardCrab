@@ -6,14 +6,13 @@ use board_crab_lib::move_gen;
 fn do_test(name: &str, position_fen: &str, depth: usize, target_node_count: usize) {
     board_crab_lib::init();
     let mut board = fen::load_fen(position_fen).unwrap();
-    let moves = move_gen::generate_moves(&mut board);
-    let perft_count = moves.len();
+    let perft_count = search::perft(&board, depth, false);
 
     if perft_count != target_node_count {
         // Test failed
         panic!(
-            "Failed position \"{}\" (got: {}, target: {}), fen: \"{}\"",
-            name, perft_count, target_node_count, position_fen
+            "Failed position \"{}\" at depth {} (got: {}, target: {}), fen: \"{}\"",
+            name, depth, perft_count, target_node_count, position_fen
         );
     }
 }
@@ -55,12 +54,36 @@ fn depth_1_perft_test() {
     }
 }
 
+#[test]
+fn depth_2_perft_test() {
+    let test_entries = [
+        ("castling", "r3k2r/3N4/8/8/4B3/4K3/4R3/8 w kq - 0 1", 724),
+        ("many checks", "1NR1n3/1k1n4/1q6/PB6/8/6Q1/6K1/8 w - - 0 1", 1162),
+    ];
+
+    for pair in test_entries {
+        do_test(pair.0, pair.1, 2, pair.2);
+    }
+}
+
 // This one features very difficult positions from https://www.chessprogramming.org/Perft_Results and other places
 #[test]
 fn super_perft_test() {
     let test_entries = [
-        ("rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8", [44, 1486, 62379]),
+        ("Complex 1 (Kiwipete)", "r3k2r/p1ppqpb1/bn2pnp1/3PN3/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQkq - 0 1", vec![48, 2039, 97862]),
+        ("Complex 2 (Talkchess)", "rnbq1k1r/pp1Pbppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R w KQ - 1 8", vec![44, 1486, 62379]),
+        ("Complex 3 (Steven Edwards)", "r4rk1/1pp1qppp/p1np1n2/2b1p1B1/2B1P1b1/P1NP1N2/1PP1QPPP/R4RK1 w - - 0 10", vec![46, 2079, 89890]),
+        ("Rooks and En Passant", "8/2p5/3p4/KP5r/1R3p1k/8/4P1P1/8 w - -", vec![14, 191, 2812, 43238]),
     ];
 
-    // TODO: Implement
+    for pair in test_entries {
+        let name = pair.0;
+        let fen_str = pair.1;
+        let target_perft_results = pair.2;
+
+        for i in 0..target_perft_results.len() {
+            let depth = i + 1;
+            do_test(name, fen_str, depth, target_perft_results[i]);
+        }
+    }
 }

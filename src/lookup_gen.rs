@@ -152,7 +152,7 @@ pub fn walk_in_dir<const SHIFT: i64>(start: BitMask, inv_occ: BitMask) -> BitMas
         mask = inv_occ | start;
     }
 
-    for i in 0..7 {
+    for _i in 0..7 {
         if SHIFT > 0 {
             result |= (result & mask) << SHIFT;
         } else {

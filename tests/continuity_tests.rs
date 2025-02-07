@@ -1,13 +1,15 @@
+use rand::Rng;
 use board_crab_lib::board::*;
-use board_crab_lib::fen;
 use board_crab_lib::search;
 use board_crab_lib::move_gen;
-use std::fmt::Write;
+extern crate rand;
 
 // Plays a bunch of random games and makes sure the board's persistent updates match manual full updates
 #[test]
 fn continuity_test_1() {
     board_crab_lib::init();
+
+    let mut rng = rand::rng();
 
     const NUM_GAMES: usize = 200;
     const MAX_MOVES_PER_GAME: usize = 60;
@@ -31,6 +33,14 @@ fn continuity_test_1() {
             if moves.len() != clone_moves.len() {
                 panic!("Continuity error");
             }
+
+            if moves.is_empty() {
+                break
+            }
+
+            // Play one of the moves
+            let move_idx = rng.random_range(0..moves.len());
+            board.do_move(moves[move_idx]);
         }
     }
 }

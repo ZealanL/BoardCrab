@@ -65,7 +65,7 @@ pub fn generate_attacks(board: &Board, team_idx: usize, piece_idx: usize, from: 
     attacks
 }
 
-pub fn can_castle(side: usize, board: &Board, king: BitMask, team_idx: usize, is_in_check: bool) -> bool {
+pub fn can_castle(side: usize, board: &Board, team_idx: usize, is_in_check: bool) -> bool {
     // From: https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/Engine/MoveGen/MoveGen.cpp#L13
     // Ordering is [Left/Queen-side, Right/King-side]
     const CASTLE_EMPTY_MASKS: [[BitMask; 2]; 2] = [
@@ -170,7 +170,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
                 tos &= !board.attacks[1 - board.turn_idx];
 
                 for castle_side in 0..2 {
-                    if can_castle(castle_side, board, king, board.turn_idx, num_checkers != 0) {
+                    if can_castle(castle_side, board, board.turn_idx, num_checkers != 0) {
                         moves.push(Move {
                             from: king,
                             to: if castle_side == 0 { bm_shift(king, -2, 0) } else { bm_shift(king, 2, 0) },

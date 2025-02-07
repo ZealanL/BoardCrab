@@ -159,7 +159,7 @@ pub fn load_fen(fen: &str) -> Result<Board> {
         let half_move_counter = fen_parts[4];
         match half_move_counter.parse::<u8>() {
             Ok(x) => { board.half_move_counter = x },
-            Err(e) => { throw_err(format!("invalid half-move counter \"{half_move_counter}\"").as_str())?; }
+            _ => { throw_err(format!("invalid half-move counter \"{half_move_counter}\"").as_str())?; }
         }
     }
 
@@ -236,7 +236,7 @@ pub fn make_fen(board: &Board) -> String {
                 let side_char = if side == 0 { 'Q' } else { 'K' };
                 write!(
                     castle_rights_stream, "{}",
-                    if (team_idx == 0) { side_char.to_ascii_uppercase() } else { side_char.to_ascii_lowercase() }
+                    if team_idx == 0 { side_char.to_ascii_uppercase() } else { side_char.to_ascii_lowercase() }
                 ).unwrap();
             }
         }
@@ -248,6 +248,7 @@ pub fn make_fen(board: &Board) -> String {
         write!(en_passant_stream, "{}", bm_to_coord(board.en_passant_mask)).unwrap();
     }
 
+    // Combine all streams
     let mut result: String = String::new();
     write!(result, "{position_stream}").unwrap();
     write!(result, " {}", if board.turn_idx == 0 { 'w' } else { 'b' }).unwrap(); // Write team
