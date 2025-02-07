@@ -44,7 +44,7 @@ pub struct SearchInfo {
 }
 
 fn is_extending_move(board: &Board, mv: &Move) -> bool {
-    mv.is_capture(board) | (mv.move_type == MoveType::Promotion)
+    mv.has_flag(Move::FLAG_CAPTURE) || mv.has_flag(Move::FLAG_PROMOTION)
 }
 
 // Maximum depth to extend searches to

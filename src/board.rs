@@ -15,15 +15,6 @@ pub const PIECE_CHARS: [char; NUM_PIECES] = ['P', 'N', 'B', 'R', 'Q', 'K'];
 
 ////////////////////////////////////////////////////////////////////////////
 
-#[derive(PartialEq, Debug, Copy, Clone)]
-pub enum MoveType {
-    Normal,
-    EnPassantCapture,
-    DoublePawnMove,
-    Promotion,
-    Castle
-}
-
 #[derive(Debug, Copy, Clone)]
 pub struct Move {
     pub from: BitMask,
@@ -31,28 +22,28 @@ pub struct Move {
     pub from_piece_idx: usize,
     pub to_piece_idx: usize,
 
-    pub move_type: MoveType
+    pub flags: u8
 }
 
 impl Move {
+    pub const FLAG_CAPTURE: u8 = 1 << 0;
+    pub const FLAG_DOUBLE_PAWN_MOVE: u8 = 1 << 1;
+    pub const FLAG_EN_PASSANT: u8 = 1 << 2;
+    pub const FLAG_PROMOTION: u8 = 1 << 3;
+    pub const FLAG_CASTLE: u8 = 1 << 4;
+
     pub fn new() -> Move {
         Move {
             from: 0,
             to: 0,
             from_piece_idx: 0,
             to_piece_idx: 0,
-            move_type: MoveType::Normal
+            flags: 0
         }
     }
 
-    // NOTE: Only works if the move was created from the given board
-    pub fn is_capture(&self, board: &Board) -> bool {
-        match self.move_type {
-            MoveType::EnPassantCapture => true,
-            _ => {
-                (self.to & board.occupancy[1 - board.turn_idx]) != 0
-            }
-        }
+    pub fn has_flag(&self, flag: u8) -> bool {
+        self.flags & flag != 0
     }
 }
 
@@ -211,14 +202,12 @@ impl Board {
     }
 
     pub fn do_move(&mut self, mv: &Move) {
-
         // From: https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/Engine/BoardState/BoardState.cpp
         // Order: Left/Queen-side, Right/King-side
         const CASTLING_ROOK_FROM_MASKS: [[BitMask; 2]; 2] = [
             [ // White
                 bm_from_coord("A1"), bm_from_coord("H1")
             ],
-
             [ // Black
                 bm_from_coord("A8"), bm_from_coord("H8")
             ]
@@ -234,7 +223,6 @@ impl Board {
         self.pieces[self.turn_idx][mv.from_piece_idx] &= inv_from;
         self.pieces[self.turn_idx][mv.to_piece_idx] |= mv.to;
         for i in 0..NUM_PIECES {
-            // TODO: Maybe not required?
             self.pieces[1 - self.turn_idx][i] &= inv_to;
         }
 
@@ -244,44 +232,35 @@ impl Board {
         self.occupancy[1 - self.turn_idx] &= inv_to;
 
         self.en_passant_mask = 0; // Reset en passant mask (we will set it only if it is a double pawn move)
-        match mv.move_type {
-            MoveType::DoublePawnMove => {
-                self.en_passant_mask = bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
-            },
-
-            MoveType::EnPassantCapture => {
-                let inv_en_passant_pos = !bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
-
-                for i in 0..NUM_PIECES {
-                    // TODO: Maybe not required?
-                    self.pieces[1 - self.turn_idx][i] &= inv_en_passant_pos;
-                }
-                self.occupancy[1 - self.turn_idx] &= inv_en_passant_pos;
-            },
-
-            MoveType::Castle => {
-                // We are castling, find and move the rook
-
-                let castle_right: bool = mv.to > mv.from; // This works because we cant castle with a vertical king move
-
-                let rook_from = CASTLING_ROOK_FROM_MASKS[self.turn_idx][castle_right as usize];
-                let rook_to = if castle_right { bm_shift(mv.to, -1, 0) } else { bm_shift(mv.to, 1, 0) };
-
-                debug_assert!(self.pieces[self.turn_idx][PIECE_ROOK] & rook_from == rook_from);
-                debug_assert!(self.combined_occupancy() & rook_to == 0);
-
-                let rook_flip = rook_from | rook_to;
-                self.pieces[self.turn_idx][PIECE_ROOK] ^= rook_flip;
-                self.occupancy[self.turn_idx] ^= rook_flip;
-
-                // Don't need to update castle rights as the king move clause will handle it after
+        if mv.has_flag(Move::FLAG_DOUBLE_PAWN_MOVE) {
+            self.en_passant_mask = bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
+        } else if mv.has_flag(Move::FLAG_EN_PASSANT) {
+            let inv_en_passant_pos = !bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
+            debug_assert!(mv.has_flag(Move::FLAG_CAPTURE));
+            for i in 0..NUM_PIECES {
+                self.pieces[1 - self.turn_idx][i] &= inv_en_passant_pos;
             }
+            self.occupancy[1 - self.turn_idx] &= inv_en_passant_pos;
+        } else if mv.has_flag(Move::FLAG_CASTLE) {
+            // We are castling, find and move the rook
 
-            _ => {}
+            let castle_right: bool = mv.to > mv.from; // This works because we cant castle with a vertical king move
+
+            let rook_from = CASTLING_ROOK_FROM_MASKS[self.turn_idx][castle_right as usize];
+            let rook_to = if castle_right { bm_shift(mv.to, -1, 0) } else { bm_shift(mv.to, 1, 0) };
+
+            debug_assert!(self.pieces[self.turn_idx][PIECE_ROOK] & rook_from == rook_from);
+            debug_assert!(self.combined_occupancy() & rook_to == 0);
+
+            let rook_flip = rook_from | rook_to;
+            self.pieces[self.turn_idx][PIECE_ROOK] ^= rook_flip;
+            self.occupancy[self.turn_idx] ^= rook_flip;
+
+            // Don't need to update castle rights as the king move clause will handle it after
         }
 
         if mv.from_piece_idx == PIECE_KING {
-            // Castling is now banned
+        // Castling is now banned
             self.castle_rights[self.turn_idx] = [false; 2];
         }
 

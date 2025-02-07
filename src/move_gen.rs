@@ -175,7 +175,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
                             to: if castle_side == 0 { bm_shift(king, -2, 0) } else { bm_shift(king, 2, 0) },
                             from_piece_idx: PIECE_KING,
                             to_piece_idx: PIECE_KING,
-                            move_type: MoveType::Castle
+                            flags: Move::FLAG_CASTLE
                         });
                     }
                 }
@@ -191,7 +191,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
             }
 
             for to in bm_itr_bits(tos) {
-                let move_type: MoveType;
+                let mut flags: u8 = 0;
                 if piece_idx == PIECE_PAWN {
                     const PROMOTE_MASK: [BitMask; 2] = [bm_make_row(7), bm_make_row(0)];
                     if (to & PROMOTE_MASK[board.turn_idx]) != 0 {
@@ -206,19 +206,19 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
                                 to,
                                 from_piece_idx: PIECE_PAWN,
                                 to_piece_idx,
-                                move_type: MoveType::Promotion
+                                flags: Move::FLAG_PROMOTION
                             });
                         }
                         continue
                     } else if (to & board.en_passant_mask) != 0 {
-                        move_type = MoveType::EnPassantCapture;
+                        flags = Move::FLAG_EN_PASSANT | Move::FLAG_CAPTURE
                     } else if to == bm_shift(from, 0, pawn_advance_dy * 2) {
-                        move_type = MoveType::DoublePawnMove;
-                    } else {
-                        move_type = MoveType::Normal;
+                        flags = Move::FLAG_DOUBLE_PAWN_MOVE
                     }
-                } else {
-                    move_type = MoveType::Normal;
+                }
+
+                if (to & board.occupancy[1 - board.turn_idx]) != 0 {
+                    flags |= Move::FLAG_CAPTURE;
                 }
 
                 moves.push(Move {
@@ -226,7 +226,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
                     to,
                     from_piece_idx: piece_idx,
                     to_piece_idx: piece_idx,
-                    move_type
+                    flags
                 });
             }
         }
