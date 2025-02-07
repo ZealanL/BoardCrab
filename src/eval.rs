@@ -6,6 +6,15 @@ pub const VALUE_INF: f32 = f32::MAX;
 pub const VALUE_CHECKMATE: f32 = 1_000.0;
 pub const VALUE_CHECKMATE_MIN: f32 = 500.0;
 
+pub fn eval_to_str(eval: Value) -> String {
+    if eval.abs() >= VALUE_CHECKMATE {
+        let mate_move_count = VALUE_CHECKMATE - eval.abs();
+        format!("mate {}", if eval > 0.0 { mate_move_count as i64 } else { -mate_move_count as i64 })
+    } else {
+        eval.to_string()
+    }
+}
+
 //////////////////////////////////////////////////////////
 
 // From the AlphaZero paper: https://arxiv.org/pdf/2009.04374
