@@ -1,4 +1,3 @@
-use std::cmp::PartialEq;
 use std::fmt::Write;
 use crate::bitmask::*;
 use crate::{lookup_gen, move_gen};
@@ -11,6 +10,7 @@ pub const PIECE_QUEEN: usize = 4;
 pub const PIECE_KING: usize = 5;
 
 pub const NUM_PIECES: usize = 6;
+pub const NUM_PIECES_NO_KING: usize = 5;
 pub const PIECE_CHARS: [char; NUM_PIECES] = ['P', 'N', 'B', 'R', 'Q', 'K'];
 
 ////////////////////////////////////////////////////////////////////////////

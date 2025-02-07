@@ -16,10 +16,11 @@ fn continuity_test_1() {
     for _i in 0..NUM_GAMES {
         let mut board = Board::start_pos();
         for _j in 0..MAX_MOVES_PER_GAME {
-            let moves = move_gen::generate_moves(&board);
+            let mut moves = move_gen::MoveBuffer::new();
+            move_gen::generate_moves(&board, &mut moves);
 
             // TODO: Move elsewhere
-            for mv in &moves {
+            for mv in moves.iter() {
                 if mv.to & (board.pieces[0][PIECE_KING] | board.pieces[1][PIECE_KING]) != 0 {
                     panic!("Generated move that could attack the king");
                 }
@@ -28,7 +29,8 @@ fn continuity_test_1() {
             let mut board_clone = board.clone();
             board_clone.full_update();
 
-            let clone_moves= move_gen::generate_moves(&board_clone);
+            let mut clone_moves = move_gen::MoveBuffer::new();
+            move_gen::generate_moves(&board_clone, &mut clone_moves);
 
             if moves.len() != clone_moves.len() {
                 panic!("Continuity error");
@@ -40,7 +42,7 @@ fn continuity_test_1() {
 
             // Play one of the moves
             let move_idx = rng.random_range(0..moves.len());
-            board.do_move(moves[move_idx]);
+            board.do_move(&moves[move_idx]);
         }
     }
 }
@@ -58,11 +60,12 @@ fn continuity_test_2() {
 
             let outer_perft = search::perft(&board, 2, false);
 
-            let moves = move_gen::generate_moves(&board);
+            let mut moves = move_gen::MoveBuffer::new();
+            move_gen::generate_moves(&board, &mut moves);
             let mut inner_perft_total = 0;
-            for mv in &moves {
+            for mv in moves.iter() {
                 let mut next_board = board.clone();
-                next_board.do_move(*mv);
+                next_board.do_move(mv);
                 next_board.full_update();
 
                 inner_perft_total += search::perft(&next_board, 1, false);

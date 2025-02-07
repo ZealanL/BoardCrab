@@ -2,6 +2,75 @@ use crate::bitmask::*;
 use crate::board::*;
 use crate::lookup_gen;
 
+pub const MAX_MOVES: usize = 256;
+
+pub struct MoveBuffer {
+    data: [Move; MAX_MOVES],
+    size: usize
+}
+
+impl MoveBuffer {
+    pub fn new() -> MoveBuffer {
+        MoveBuffer {
+            data: unsafe { std::mem::MaybeUninit::uninit().assume_init() }, // Uninitialized
+            size: 0
+        }
+    }
+
+    pub fn len(&self) -> usize { self.size }
+
+    pub fn is_empty(&self) -> bool { self.size == 0 }
+
+    pub fn push(&mut self, mv: Move) {
+        if self.size >= MAX_MOVES {
+            panic!("Exceed maximum moves {MAX_MOVES} (this should never happen in a real position)");
+        }
+
+        self.data[self.size] = mv;
+        self.size += 1;
+    }
+
+    pub fn clear(&mut self) {
+        self.size = 0;
+    }
+
+    pub fn iter(&self) -> MoveBufferIterator<'_> {
+        MoveBufferIterator {
+            move_set: self,
+            index: 0
+        }
+    }
+}
+
+impl std::ops::Index<usize> for MoveBuffer {
+    type Output = Move;
+    fn index(&self, i: usize) -> &Move { &self.data[i] }
+}
+
+impl std::ops::IndexMut<usize> for MoveBuffer {
+    fn index_mut(&mut self, i: usize) -> &mut Move { &mut self.data[i] }
+}
+
+pub struct MoveBufferIterator<'a> {
+    move_set: &'a MoveBuffer,
+    index: usize
+}
+
+impl<'a> Iterator for MoveBufferIterator<'a> {
+    type Item = &'a Move;
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.index < self.move_set.len() {
+            let result = Some(&self.move_set[self.index]);
+            self.index += 1;
+            result
+        } else {
+            None
+        }
+    }
+}
+
+/////////////////////////////////////////
+
 // Special check if an en passant capture would unpin a horizontal slider
 // Because en passant removes 2 pawns from the rank at the same time, it can bypass our pin checks
 fn is_en_passant_pinned_horizontal(pawn_from: BitMask, board: &Board, turn_idx: usize, pawn_advance_dy: i64) -> bool{
@@ -101,9 +170,7 @@ pub fn can_castle(side: usize, board: &Board, team_idx: usize, is_in_check: bool
     true
 }
 
-pub fn generate_moves(board: &Board) -> Vec<Move> {
-    let mut moves: Vec<Move> = Vec::with_capacity(50);
-
+pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
     let occ_team = board.occupancy[board.turn_idx];
     let occ_opp = board.occupancy[1 - board.turn_idx];
     let occ_combined = occ_team | occ_opp;
@@ -170,7 +237,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
 
                 for castle_side in 0..2 {
                     if can_castle(castle_side, board, board.turn_idx, num_checkers != 0) {
-                        moves.push(Move {
+                        out_move_set.push(Move {
                             from: king,
                             to: if castle_side == 0 { bm_shift(king, -2, 0) } else { bm_shift(king, 2, 0) },
                             from_piece_idx: PIECE_KING,
@@ -201,7 +268,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
                                 continue; // Can't promote to king lol
                             }
 
-                            moves.push(Move {
+                            out_move_set.push(Move {
                                 from,
                                 to,
                                 from_piece_idx: PIECE_PAWN,
@@ -221,7 +288,7 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
                     flags |= Move::FLAG_CAPTURE;
                 }
 
-                moves.push(Move {
+                out_move_set.push(Move {
                     from,
                     to,
                     from_piece_idx: piece_idx,
@@ -231,6 +298,4 @@ pub fn generate_moves(board: &Board) -> Vec<Move> {
             }
         }
     }
-
-    moves
 }

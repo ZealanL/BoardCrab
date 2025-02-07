@@ -3,10 +3,11 @@ use crate::eval::*;
 use crate::{eval, move_gen};
 
 fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usize {
-    let moves = move_gen::generate_moves(board);
+    let mut moves = move_gen::MoveBuffer::new();
+    move_gen::generate_moves(&board, &mut moves);
     if depth > 1 {
         let mut total: usize = 0;
-        for mv in moves {
+        for mv in moves.iter() {
             let mut next_board: Board = *board;
             next_board.do_move(&mv);
             let sub_total = _perft(&next_board, depth - 1, depth_elapsed + 1, print);
@@ -21,7 +22,7 @@ fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usi
         total
     } else if depth == 1 {
         if depth_elapsed == 0 && print {
-            for mv in &moves {
+            for mv in moves.iter() {
                 println!("{}: {}", mv, 1);
             }
             println!("\nNodes Searched: {}", moves.len());
@@ -39,6 +40,10 @@ pub fn perft(board: &Board, depth: usize, print: bool) -> usize { _perft(board, 
 
 //////////////////////////////////////////////////////////////////////////
 
+fn get_no_moves_eval(board: &Board) -> Value {
+    if board.checkers != 0 { -VALUE_CHECKMATE } else { 0.0 }
+}
+
 pub struct SearchInfo {
     pub total_nodes: u64
 }
@@ -48,7 +53,7 @@ fn is_extending_move(board: &Board, mv: &Move) -> bool {
 }
 
 // Maximum depth to extend searches to
-const MAX_EXTENSION_DEPTH: usize = 8;
+const MAX_EXTENSION_DEPTH: usize = 4;
 
 // Searches only extending moves
 fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Value, upper_bound: Value, depth_remaining: usize) -> Value {
@@ -67,8 +72,12 @@ fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound
         return best_eval;
     }
 
-    let moves = &move_gen::generate_moves(board);
-    for mv in moves {
+    let mut moves = move_gen::MoveBuffer::new();
+    move_gen::generate_moves(board, &mut moves);
+    if moves.is_empty() {
+        return get_no_moves_eval(board);
+    }
+    for mv in moves.iter() {
         if !is_extending_move(board, mv) {
             continue
         }
@@ -110,24 +119,58 @@ pub struct SearchResult {
 pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Value, upper_bound: Value, depth_remaining: i64, depth_elapsed: usize) -> SearchResult {
     search_info.total_nodes += 1;
 
-    let moves = &move_gen::generate_moves(board);
-
     if depth_elapsed > 10 {
         return SearchResult{ eval: 0.0, best_move_idx: None };
     }
 
-    if moves.is_empty() {
-        return SearchResult {
-            eval: if board.checkers != 0 { -VALUE_CHECKMATE } else { 0.0 },
-            best_move_idx: None
-        }
-    }
-
     if depth_remaining > 0 {
+        let mut moves = move_gen::MoveBuffer::new();
+        move_gen::generate_moves(&board, &mut moves);
+        if moves.is_empty() {
+            return SearchResult {
+                eval: get_no_moves_eval(board),
+                best_move_idx: None
+            }
+        }
+
+        #[derive(Copy, Clone)]
+        struct RatedMove {
+            idx: usize,
+            eval: Value
+        }
+
+        let mut rated_moves: Vec<RatedMove> = Vec::with_capacity(moves.len());
+        for i in 0..moves.len() {
+            rated_moves.push(
+                RatedMove {
+                    idx: i,
+                    eval: eval_move(board, &moves[i]),
+                }
+            )
+        }
+
+        // Insertion sort
+        for i in 1..moves.len() {
+            let mut j = i;
+            while j > 0 {
+                let prev = rated_moves[j - 1];
+                let cur = rated_moves[j];
+
+                if cur.eval > prev.eval {
+                    // Swap
+                    rated_moves[j - 1] = cur;
+                    rated_moves[j] = prev;
+                } else {
+                    break
+                }
+            }
+        }
+
         let mut best_eval = -VALUE_INF;
         let mut best_move_idx: usize = 0;
         for i in 0..moves.len() {
-            let mv = &moves[i];
+            let move_idx = rated_moves[i].idx;
+            let mv = &moves[move_idx];
 
             let mut next_board: Board = board.clone();
             next_board.do_move(mv);
@@ -154,7 +197,6 @@ pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Valu
             eval: best_eval,
             best_move_idx: Some(best_move_idx)
         }
-
 
     } else {
         SearchResult {
