@@ -1,6 +1,6 @@
 use crate::board::*;
 use crate::eval::*;
-use crate::{eval, move_gen};
+use crate::move_gen;
 
 fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usize {
     let mut moves = move_gen::MoveBuffer::new();
@@ -48,7 +48,7 @@ pub struct SearchInfo {
     pub total_nodes: u64
 }
 
-fn is_extending_move(board: &Board, mv: &Move) -> bool {
+fn is_extending_move(mv: &Move) -> bool {
     mv.has_flag(Move::FLAG_CAPTURE) || mv.has_flag(Move::FLAG_PROMOTION)
 }
 
@@ -78,7 +78,7 @@ fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound
         return get_no_moves_eval(board);
     }
     for mv in moves.iter() {
-        if !is_extending_move(board, mv) {
+        if !is_extending_move(mv) {
             continue
         }
 
@@ -163,6 +163,8 @@ pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Valu
                 } else {
                     break
                 }
+
+                j -= 1;
             }
         }
 

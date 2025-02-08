@@ -74,7 +74,7 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
             }
         }
 
-        eval += CAPTURE_BASE_BONUS;
+        eval += capture_val;
     }
 
     let to_idx = bm_to_idx(mv.to);
