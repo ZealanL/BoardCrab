@@ -33,7 +33,7 @@ fn continuity_test_1() {
             move_gen::generate_moves(&board_clone, &mut clone_moves);
 
             if moves.len() != clone_moves.len() {
-                panic!("Continuity error");
+                panic!("Continuity error (bad move generation)");
             }
 
             if moves.is_empty() {
@@ -55,7 +55,7 @@ fn continuity_test_2() {
     const NUM_GAMES: usize = 5;
     const MAX_MOVES_PER_GAME: usize = 30;
     for _i in 0..NUM_GAMES {
-        let mut board = Board::start_pos();
+        let board = Board::start_pos();
         for _j in 0..MAX_MOVES_PER_GAME {
 
             let outer_perft = search::perft(&board, 2, false);

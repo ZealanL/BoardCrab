@@ -6,11 +6,13 @@ pub mod eval;
 
 mod bitmask;
 mod lookup_gen;
+mod zobrist;
 
 static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 
 fn _init() {
     lookup_gen::init();
+    zobrist::init();
 }
 
 pub fn init() {

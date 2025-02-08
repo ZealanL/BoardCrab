@@ -1,11 +1,9 @@
-use board_crab_lib::board::*;
 use board_crab_lib::fen;
 use board_crab_lib::search;
-use board_crab_lib::move_gen;
 
 fn do_test(name: &str, position_fen: &str, depth: usize, target_node_count: usize) {
     board_crab_lib::init();
-    let mut board = fen::load_fen(position_fen).unwrap();
+    let board = fen::load_fen(position_fen).unwrap();
     let perft_count = search::perft(&board, depth, false);
 
     if perft_count != target_node_count {

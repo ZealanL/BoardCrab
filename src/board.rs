@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use crate::bitmask::*;
 use crate::{lookup_gen, move_gen};
+use crate::zobrist;
 
 pub const PIECE_PAWN: usize = 0;
 pub const PIECE_KNIGHT: usize = 1;
@@ -88,7 +89,9 @@ pub struct Board {
     // Order is [left,right] (left being queenside)
     pub castle_rights: [[bool; 2]; 2],
 
-    pub half_move_counter: u8
+    pub half_move_counter: u8,
+
+    pub hash: zobrist::Hash,
 }
 
 impl Board {
@@ -104,7 +107,9 @@ impl Board {
             turn_idx: 0,
             en_passant_mask: 0,
             castle_rights: [[false; 2]; 2],
-            half_move_counter: 0
+            half_move_counter: 0,
+
+            hash: 0
         }
     }
 
@@ -147,11 +152,31 @@ impl Board {
         // Full-update occupancy
         self.occupancy = [0; 2];
         for team_idx in 0..2 {
-            for i in 0..NUM_PIECES {
-                self.occupancy[team_idx] |= self.pieces[team_idx][i];
+            for piece_idx in 0..NUM_PIECES {
+                self.occupancy[team_idx] |= self.pieces[team_idx][piece_idx];
             }
         }
 
+        { // Full-update hash
+            self.hash = 0;
+
+            for team_idx in 0..2 {
+                for piece_idx in 0..NUM_PIECES {
+                    for piece_mask in bm_itr_bits(self.pieces[team_idx][piece_idx]) {
+                        let pos_idx = bm_to_idx(piece_mask);
+                        self.hash ^= zobrist::hash_piece(team_idx, piece_idx, pos_idx);
+                    }
+                }
+            }
+
+            self.hash ^= zobrist::hash_castle_rights(self.castle_rights);
+            self.hash ^= zobrist::hash_en_passant(self.en_passant_mask);
+            if self.turn_idx == 1 {
+                self.hash ^= zobrist::hash_turn();
+            }
+        }
+
+        // Full-update attacks
         self.update_attacks(self.turn_idx);
         self.update_attacks(1 - self.turn_idx);
     }
@@ -216,14 +241,25 @@ impl Board {
         const CASTLING_ROOK_FROM_COMBINED_MASK: BitMask =
             CASTLING_ROOK_FROM_MASKS[0][0] | CASTLING_ROOK_FROM_MASKS[0][1] | CASTLING_ROOK_FROM_MASKS[1][0] | CASTLING_ROOK_FROM_MASKS[1][1];
 
+        let from_idx = bm_to_idx(mv.from);
+        let to_idx = bm_to_idx(mv.to);
         let inv_from = !mv.from;
         let inv_to = !mv.to;
+
+        // Undo castle and en passant hashes
+        self.hash ^= zobrist::hash_castle_rights(self.castle_rights);
+        self.hash ^= zobrist::hash_en_passant(self.en_passant_mask);
 
         // Update pieces
         self.pieces[self.turn_idx][mv.from_piece_idx] &= inv_from;
         self.pieces[self.turn_idx][mv.to_piece_idx] |= mv.to;
-        for i in 0..NUM_PIECES {
-            self.pieces[1 - self.turn_idx][i] &= inv_to;
+        self.hash ^= zobrist::hash_piece(self.turn_idx, mv.from_piece_idx, from_idx);
+        self.hash ^= zobrist::hash_piece(self.turn_idx, mv.to_piece_idx, to_idx);
+        for opp_piece_idx in 0..NUM_PIECES {
+            if (self.pieces[1 - self.turn_idx][opp_piece_idx] & mv.to) != 0 {
+                self.hash ^= zobrist::hash_piece(1 - self.turn_idx, opp_piece_idx, to_idx);
+            }
+            self.pieces[1 - self.turn_idx][opp_piece_idx] &= inv_to;
         }
 
         // Update occupancy
@@ -235,12 +271,13 @@ impl Board {
         if mv.has_flag(Move::FLAG_DOUBLE_PAWN_MOVE) {
             self.en_passant_mask = bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
         } else if mv.has_flag(Move::FLAG_EN_PASSANT) {
-            let inv_en_passant_pos = !bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
+            let en_passant_pos = bm_shift(mv.to, 0, if self.turn_idx == 0 { -1 } else { 1 });
             debug_assert!(mv.has_flag(Move::FLAG_CAPTURE));
-            for i in 0..NUM_PIECES {
-                self.pieces[1 - self.turn_idx][i] &= inv_en_passant_pos;
-            }
-            self.occupancy[1 - self.turn_idx] &= inv_en_passant_pos;
+            self.pieces[1 - self.turn_idx][PIECE_PAWN] &= !en_passant_pos;
+            self.occupancy[1 - self.turn_idx] &= !en_passant_pos;
+
+            self.hash ^= zobrist::hash_piece(1 - self.turn_idx, PIECE_PAWN, bm_to_idx(en_passant_pos));
+
         } else if mv.has_flag(Move::FLAG_CASTLE) {
             // We are castling, find and move the rook
 
@@ -256,11 +293,14 @@ impl Board {
             self.pieces[self.turn_idx][PIECE_ROOK] ^= rook_flip;
             self.occupancy[self.turn_idx] ^= rook_flip;
 
+            self.hash ^= zobrist::hash_piece(self.turn_idx, PIECE_ROOK, bm_to_idx(rook_from));
+            self.hash ^= zobrist::hash_piece(self.turn_idx, PIECE_ROOK, bm_to_idx(rook_to));
+
             // Don't need to update castle rights as the king move clause will handle it after
         }
 
         if mv.from_piece_idx == PIECE_KING {
-        // Castling is now banned
+            // Castling is now banned
             self.castle_rights[self.turn_idx] = [false; 2];
         }
 
@@ -287,6 +327,13 @@ impl Board {
 
         self.update_attacks(self.turn_idx);
         self.turn_idx = 1 - self.turn_idx;
+
+        // Redo castle and en passant hashes
+        self.hash ^= zobrist::hash_castle_rights(self.castle_rights);
+        self.hash ^= zobrist::hash_en_passant(self.en_passant_mask);
+
+        // Flip turn hash
+        self.hash ^= zobrist::hash_turn();
     }
 }
 
