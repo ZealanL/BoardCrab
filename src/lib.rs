@@ -3,6 +3,7 @@ pub mod fen;
 pub mod search;
 pub mod move_gen;
 pub mod eval;
+pub mod transpos;
 
 mod bitmask;
 mod lookup_gen;

@@ -1,6 +1,7 @@
 use std::fmt::Write;
 use crate::bitmask::*;
-use crate::{lookup_gen, move_gen};
+use crate::lookup_gen;
+use crate::move_gen;
 use crate::zobrist;
 
 pub const PIECE_PAWN: usize = 0;

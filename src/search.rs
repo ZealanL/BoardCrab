@@ -1,6 +1,7 @@
 use crate::board::*;
 use crate::eval::*;
 use crate::move_gen;
+use crate::transpos;
 
 fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usize {
     let mut moves = move_gen::MoveBuffer::new();
@@ -115,12 +116,43 @@ pub struct SearchResult {
     pub best_move_idx: Option<usize> // May not exist if at depth 0
 }
 
-// NOTE: depth_remaining can go negative when extending
-pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Value, upper_bound: Value, depth_remaining: i64, depth_elapsed: usize) -> SearchResult {
+pub fn search(board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo, mut lower_bound: Value, upper_bound: Value, depth_remaining: u8, depth_elapsed: u8) -> SearchResult {
     search_info.total_nodes += 1;
 
-    if depth_elapsed > 10 {
-        return SearchResult{ eval: 0.0, best_move_idx: None };
+    let mut table_entry = table.get(board.hash);
+
+    let mut table_best_move: Option<u8> = None;
+    if table_entry.is_valid() {
+        if table_entry.depth_remaining >= depth_remaining {
+            match table_entry.entry_type {
+                transpos::EntryType::Exact | transpos::EntryType::LowerBound => {
+                    // TODO: Does it actually matter if it's the lower bound or not?
+                    return SearchResult {
+                        eval: table_entry.eval,
+                        best_move_idx: Some(table_entry.best_move_idx as usize)
+                    };
+                },
+                transpos::EntryType::UpperBound => {
+                    if table_entry.eval >= upper_bound {
+                        // Beta cut-off
+                        return SearchResult {
+                            eval: table_entry.eval,
+                            best_move_idx: Some(table_entry.best_move_idx as usize)
+                        };
+                    } else {
+                        // Just use the best move
+                        table_best_move = Some(table_entry.best_move_idx);
+                    }
+                },
+                _ => {
+                    panic!("Invalid or unsupported entry type: {}", table_entry.entry_type as usize);
+                }
+            }
+        } else {
+            // From a lower depth, so not super useful
+            // However, we can still use the best move
+            table_best_move = Some(table_entry.best_move_idx);
+        }
     }
 
     if depth_remaining > 0 {
@@ -149,6 +181,10 @@ pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Valu
             )
         }
 
+        if table_best_move.is_some() {
+            rated_moves[table_best_move.unwrap() as usize].eval = VALUE_INF;
+        }
+
         // Insertion sort
         for i in 1..moves.len() {
             let mut j = i;
@@ -170,6 +206,7 @@ pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Valu
 
         let mut best_eval = -VALUE_INF;
         let mut best_move_idx: usize = 0;
+        let mut upper_bound_hit = false;
         for i in 0..moves.len() {
             let move_idx = rated_moves[i].idx;
             let mv = &moves[move_idx];
@@ -178,22 +215,34 @@ pub fn search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Valu
             next_board.do_move(mv);
 
             let next_result =
-                search(&next_board, search_info, -upper_bound, -lower_bound, depth_remaining - 1, depth_elapsed + 1);
+                search(&next_board, table, search_info, -upper_bound, -lower_bound, depth_remaining - 1, depth_elapsed + 1);
             let next_eval = decay_eval(-next_result.eval);
 
             if next_eval > best_eval {
                 best_eval = next_eval;
                 best_move_idx = i;
                 if next_eval > lower_bound {
-                    lower_bound = next_eval
+                    lower_bound = next_eval;
                 }
 
                 if next_eval >= upper_bound {
                     // Beta cut-off
+                    upper_bound_hit = true;
                     break
                 }
             }
         }
+
+        table.set(
+            transpos::Entry {
+                hash: board.hash,
+                eval: best_eval,
+                best_move_idx: best_move_idx as u8,
+                depth_remaining,
+                entry_type: if upper_bound_hit { transpos::EntryType::UpperBound } else { transpos::EntryType::Exact },
+                age_count: 0 // Will be set by the transposition table
+            }
+        );
 
         SearchResult {
             eval: best_eval,
