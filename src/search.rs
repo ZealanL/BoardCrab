@@ -220,7 +220,7 @@ pub fn search(board: &Board, table: &mut transpos::Table, search_info: &mut Sear
 
             if next_eval > best_eval {
                 best_eval = next_eval;
-                best_move_idx = i;
+                best_move_idx = move_idx;
                 if next_eval > lower_bound {
                     lower_bound = next_eval;
                 }
