@@ -27,9 +27,7 @@ pub fn decay_eval(eval: Value) -> Value {
 
 //////////////////////////////////////////////////////////
 
-// From the AlphaZero paper: https://arxiv.org/pdf/2009.04374
-// (I also buffed the queen a little bit)
-const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.05, 3.33, 5.63, 9.5 + 1.0];
+const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.2, 3.5, 5.5, 10.0];
 
 // Returns the "attacking power" of a team from 0-1
 // This is meant to represent how capable the player is of making a deadly attack on the king
@@ -41,7 +39,7 @@ fn calc_attacking_power(board: &Board, team_idx: usize) -> Value {
         Value::min(1.0, 0.7 + (rook_count as Value) * 0.15)
     } else {
         if rook_count >= 2 {
-            0.25
+            0.35
         } else {
             // Can't really create much of an attack
             0.0
@@ -66,23 +64,23 @@ fn eval_piece_position(team_idx: usize, piece_idx: usize, piece_mask: BitMask, o
 
     match piece_idx {
         PIECE_KNIGHT => {
-            value += add_mask_bonus(piece_mask, CENTER_1_MASK, 0.2);
+            value += add_mask_bonus(piece_mask, CENTER_1_MASK, 0.1);
             value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.2);
-            value += add_mask_bonus(piece_mask, EDGE_MASK, -0.2);
-            value += add_mask_bonus(piece_mask, CORNER_MASK, -0.2);
+            value += add_mask_bonus(piece_mask, EDGE_MASK, -0.3);
+            value += add_mask_bonus(piece_mask, CORNER_MASK, -0.3);
         },
         PIECE_BISHOP => {
-            value += add_mask_bonus(piece_mask, GOOD_BISHOP_MASK, 0.3);
+            value += add_mask_bonus(piece_mask, GOOD_BISHOP_MASK, 0.2);
             value += add_mask_bonus(piece_mask, EDGE_MASK, -0.2);
         },
         PIECE_ROOK => {
-            value += add_mask_bonus(piece_mask, bm_make_row(7-1), 0.6);
+            value += add_mask_bonus(piece_mask, bm_make_row(7-1), 0.5);
         }
         PIECE_QUEEN => {
-            value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.3);
+            value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.5);
         }
         PIECE_KING => {
-            value += add_mask_bonus(piece_mask, CENTER_1_MASK, 0.1 * (1.0 - opp_attack_power));
+            value += add_mask_bonus(piece_mask, CENTER_1_MASK, 0.2 * (1.0 - opp_attack_power));
             value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.2 * (1.0 - opp_attack_power));
             value += add_mask_bonus(piece_mask, CENTER_3_MASK, 0.1 * (1.0 - opp_attack_power));
         }
@@ -111,6 +109,7 @@ fn eval_piece_masked_positioning(board: &Board, team_idx: usize, opp_attack_powe
 fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
     let mut value: Value = 0.0;
     let pawns = board.pieces[team_idx][PIECE_PAWN];
+    let opp_pawns = board.pieces[1 - team_idx][PIECE_PAWN];
 
     for pawn in bm_iter_bits(pawns) {
         let (pawn_x, pawn_y) = bm_to_xy(pawn);
@@ -129,7 +128,7 @@ fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value 
 
         let pass_prev = columns & !behind_rows;
 
-        let is_passed = (pass_prev & pawns) == 0;
+        let is_passed = (pass_prev & opp_pawns) == 0;
         let promote_thread_value;
         {
             let promote_ratio = ((pawn_rel_y - 1) as Value) / 6.0;
@@ -139,20 +138,20 @@ fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value 
             if is_passed {
                 promote_thread_value = promote_ratio_sq * 3.0 * promote_threat_scale;
             } else {
-                promote_thread_value = promote_ratio_sq * 0.5 * promote_threat_scale;
+                promote_thread_value = promote_ratio_sq * 1.0 * promote_threat_scale;
             }
         }
 
         // TODO: Only needs to be able to count to 3
         // TODO: Scale with distance between the pawns
         let pawns_in_file = (pawns & column).count_ones();
-        let stacked_penalty = ((pawns_in_file - 1) as Value) * -0.3;
+        let stacked_penalty = (((pawns_in_file - 1) as Value) / 2.0) * -0.3;
 
         value += promote_thread_value + stacked_penalty;
 
         let is_isolated = ((pawns & !pawn) & columns) == 0;
         if is_isolated {
-            value += -0.3;
+            value += -0.3 * (1.0 - opp_attack_power*0.3);
         }
 
         // TODO: Penalize backwards pawns?
@@ -197,7 +196,7 @@ fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> 
         let directly_above_king = (squares_above_king_1 | squares_above_king_2) & bm_make_row(king_y);
         if (pawns & directly_above_king) == 0 {
             // Penalize the coverage frac if the pawn directly above the king is missing
-            pawn_coverage_frac *= 0.6;
+            pawn_coverage_frac *= 0.5;
         }
     }
 
@@ -210,10 +209,10 @@ fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> 
 
     // TODO: Implement king accessibility by pretending the king is a queen
 
-    ((pawn_coverage_frac * 0.9)
-        + (king_height_frac * -2.5)
-        + (king_off_center_frac * 0.7)
-        + (attack_frac * -1.0)
+    ((pawn_coverage_frac * 1.3)
+        + (king_height_frac * -3.0)
+        + (king_off_center_frac * 1.0)
+        + (attack_frac * -1.3)
     ) * opp_attack_power
 }
 
@@ -297,7 +296,7 @@ pub fn print_eval(board: &Board) {
         "", "Material", "King Safety", "Pawns", "Pieces", "Mobility"
     );
     for i in 0..2 {
-        println!("{:>12} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
+        println!("{:>14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
             ["White", "Black"][i],
             eval_material(board, i),
             eval_king_safety(board, i, attack_power[1 - i]),
@@ -349,8 +348,8 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
             PIECE_BISHOP | PIECE_ROOK | PIECE_QUEEN => {
                 let between_mask = lookup_gen::get_between_mask_exclusive(bm_to_idx(opp_king_pos), to_idx);
                 let num_blockers = (board.combined_occupancy() & between_mask).count_ones(); // Only need to count to 2
-                is_check = (num_blockers == 0);
-                is_pin = (num_blockers == 1);
+                is_check = num_blockers == 0;
+                is_pin = num_blockers == 1;
             },
             _ => {
                 is_check = true;
