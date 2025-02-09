@@ -166,7 +166,6 @@ pub fn process_cmd(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
         }
         "quit" => {
             std::process::exit(0);
-            true
         }
         "position" => cmd_position(parts, engine),
         "go" => cmd_go(parts, engine),

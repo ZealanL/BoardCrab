@@ -6,7 +6,6 @@ use crate::move_gen;
 use crate::search;
 use crate::eval::*;
 use crate::move_gen::MoveBuffer;
-use crate::search::SearchInfo;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 use crate::uci;

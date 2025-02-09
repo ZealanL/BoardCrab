@@ -11,6 +11,7 @@ pub struct MoveBuffer {
 
 impl MoveBuffer {
     pub fn new() -> MoveBuffer {
+        #![allow(invalid_value)]
         MoveBuffer {
             data: unsafe { std::mem::MaybeUninit::uninit().assume_init() }, // Uninitialized
             size: 0

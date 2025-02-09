@@ -12,7 +12,7 @@ pub const fn bm_from_idx(idx: usize) -> BitMask {
 
 pub const fn bm_from_xy(x: i64, y: i64) -> BitMask {
     debug_assert!(x < 8 && y < 8);
-    1 << (x + y * 8)
+    bm_from_idx((x + y * 8) as usize)
 }
 
 pub const fn bm_to_xy(mask: BitMask) -> (i64, i64) {
