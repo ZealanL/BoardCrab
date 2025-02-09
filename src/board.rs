@@ -47,6 +47,10 @@ impl Move {
     pub fn has_flag(&self, flag: u8) -> bool {
         self.flags & flag != 0
     }
+
+    pub fn is_quiet(&self) -> bool {
+        !self.has_flag(Move::FLAG_CAPTURE) && !self.has_flag(Move::FLAG_PROMOTION)
+    }
 }
 
 impl std::fmt::Display for Move {

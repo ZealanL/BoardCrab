@@ -1,4 +1,5 @@
 use std::collections::HashSet;
+use crate::bitmask::*;
 use crate::board::*;
 use crate::eval::*;
 use crate::move_gen;
@@ -105,14 +106,18 @@ fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound
 
 pub struct SearchInfo {
     pub total_nodes: usize,
-    pub depth_hashes: [Hash; 256] // For repetition detection
+    pub depth_hashes: [Hash; 256], // For repetition detection
+
+    // See https://www.chessprogramming.org/History_Heuristic
+    pub history_counters: [[usize; 64]; NUM_PIECES]
 }
 
 impl SearchInfo {
     pub fn new() -> SearchInfo {
         SearchInfo {
             total_nodes: 0,
-            depth_hashes: [0; 256]
+            depth_hashes: [0; 256],
+            history_counters: [[0; 64]; NUM_PIECES]
         }
     }
 }
@@ -223,10 +228,25 @@ fn _search(
 
         let mut rated_moves: Vec<RatedMove> = Vec::with_capacity(moves.len());
         for i in 0..moves.len() {
+            let mv = moves[i];
+            let is_quiet = mv.is_quiet();
+            let move_score;
+            if is_quiet {
+                let history_counter = search_info.history_counters[mv.from_piece_idx][bm_to_idx(mv.to)];
+
+                // Decay range from 0-1
+                // This prioritizes accuracy in smaller values, which are more common
+                move_score = 1.0 - (1.0 / (1.0 + (history_counter as Value)/100.0));
+            }  else {
+                let move_eval = eval_move(board, &mv);
+
+                // Move out of the [0, 1] range of quiet history moves
+                move_score = if move_eval > 0.0 { move_eval + 1.0 } else { move_eval };
+            }
             rated_moves.push(
                 RatedMove {
                     idx: i,
-                    eval: eval_move(board, &moves[i]),
+                    eval: move_score
                 }
             )
         }
@@ -288,6 +308,9 @@ fn _search(
 
                 if next_eval >= upper_bound {
                     // Failed high, beta cut-off
+                    if mv.is_quiet() {
+                        search_info.history_counters[mv.from_piece_idx][bm_to_idx(mv.to)] += 1;
+                    }
                     break
                 }
             }
