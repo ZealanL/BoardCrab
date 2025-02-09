@@ -336,6 +336,12 @@ impl Board {
         // Flip turn hash
         self.hash ^= zobrist::hash_turn();
     }
+
+    pub fn do_null_move(&mut self) {
+        self.en_passant_mask = 0;
+        self.update_attacks(self.turn_idx);
+        self.turn_idx = 1 - self.turn_idx;
+    }
 }
 
 impl std::fmt::Display for Board {
