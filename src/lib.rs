@@ -7,10 +7,10 @@ pub mod transpos;
 pub mod uci;
 pub mod async_engine;
 pub mod thread_flag;
+pub mod zobrist;
 
 mod bitmask;
 mod lookup_gen;
-mod zobrist;
 
 
 static INIT_ONCE: std::sync::Once = std::sync::Once::new();

@@ -1,7 +1,8 @@
 use std::collections::HashSet;
 use crate::board::*;
 use crate::eval::*;
-use crate::{move_gen, zobrist};
+use crate::move_gen;
+use crate::zobrist::Hash;
 use crate::move_gen::MoveBuffer;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
@@ -46,10 +47,6 @@ pub fn perft(board: &Board, depth: usize, print: bool) -> usize { _perft(board, 
 
 fn get_no_moves_eval(board: &Board) -> Value {
     if board.checkers != 0 { -VALUE_CHECKMATE } else { 0.0 }
-}
-
-pub struct SearchInfo {
-    pub total_nodes: u64
 }
 
 fn is_extending_move(mv: &Move) -> bool {
@@ -106,10 +103,16 @@ fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound
     best_eval
 }
 
+pub struct SearchInfo {
+    pub total_nodes: usize,
+    pub depth_hashes: [Hash; 256] // For repetition detection
+}
+
 impl SearchInfo {
     pub fn new() -> SearchInfo {
         SearchInfo {
-            total_nodes: 0
+            total_nodes: 0,
+            depth_hashes: [0; 256]
         }
     }
 }
@@ -126,6 +129,21 @@ pub fn search(
     stop_flag: &ThreadFlag, stop_time: Option<std::time::Instant>) -> SearchResult {
 
     search_info.total_nodes += 1;
+
+    // Check draw by repetition
+    for i in (4..10).step_by(2) {
+        if (depth_elapsed >= i) && search_info.depth_hashes[(depth_elapsed - i) as usize] == board.hash {
+            // Loop detected
+            return SearchResult {
+                eval: 0.0,
+                best_move_idx: None
+            };
+        } else {
+            break;
+        }
+    }
+    search_info.depth_hashes[depth_elapsed as usize] = board.hash;
+
     if depth_remaining > 2 { // No point in checking at a super low depth
         let mut stop = false;
 
@@ -183,7 +201,7 @@ pub fn search(
     }
 
     if depth_remaining > 0 {
-        let mut moves = move_gen::MoveBuffer::new();
+        let mut moves = MoveBuffer::new();
         move_gen::generate_moves(&board, &mut moves);
         if moves.is_empty() {
             return SearchResult {
@@ -298,7 +316,7 @@ pub fn search(
 
 pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
     let mut result = Vec::new();
-    let mut found_hashes = HashSet::<zobrist::Hash>::new();
+    let mut found_hashes = HashSet::<Hash>::new();
 
     loop {
 
