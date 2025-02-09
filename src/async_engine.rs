@@ -45,15 +45,13 @@ impl AsyncEngine {
 
         self.thread_join_handle = Some(
             thread::spawn(move || {
-                let mut search_info = SearchInfo::new();
                 let mut latest_best_move_idx = None;
                 for depth_minus_one in 0..max_depth {
                     let depth = depth_minus_one + 1;
                     let mut table = arc_table.lock().unwrap();
-                    let search_result = search::search(
-                        &board, &mut table, &mut search_info,
-                        -VALUE_CHECKMATE, VALUE_CHECKMATE,
-                        depth, 0, &stop_flag, stop_time
+                    let (search_result, search_info) = search::search(
+                        &board, &mut table,
+                        depth, &stop_flag, stop_time
                     );
 
                     if search_result.best_move_idx.is_some() {

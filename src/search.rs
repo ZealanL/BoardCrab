@@ -122,7 +122,7 @@ pub struct SearchResult {
     pub best_move_idx: Option<usize> // May not exist if at depth 0
 }
 
-pub fn search(
+fn _search(
     board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: u8,
@@ -259,7 +259,7 @@ pub fn search(
             let mut next_board: Board = board.clone();
             next_board.do_move(mv);
 
-            let next_result = search(
+            let next_result = _search(
                     &next_board, table, search_info,
                     -upper_bound, -lower_bound,
                     depth_remaining - 1, depth_elapsed + 1,
@@ -312,6 +312,18 @@ pub fn search(
             best_move_idx: None
         }
     }
+}
+
+pub fn search(
+    board: &Board, table: &mut transpos::Table, depth: u8,
+    stop_flag: &ThreadFlag, stop_time: Option<std::time::Instant>) -> (SearchResult, SearchInfo) {
+
+    let mut search_info = SearchInfo::new();
+    let search_result = _search(
+        board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+    );
+
+    (search_result, search_info)
 }
 
 pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
