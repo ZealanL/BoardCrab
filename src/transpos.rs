@@ -5,8 +5,8 @@ use crate::eval::Value;
 pub enum EntryType {
     Invalid,
     Exact,
-    LowerBound,
-    UpperBound
+    FailLow,
+    FailHigh
 }
 
 #[derive(Debug, Copy, Clone)]

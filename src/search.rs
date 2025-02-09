@@ -169,25 +169,29 @@ fn _search(
     let mut table_best_move: Option<u8> = None;
     if table_entry.is_valid() {
         if table_entry.depth_remaining >= depth_remaining {
+            let get_table_result = || -> SearchResult {
+                SearchResult {
+                    eval: table_entry.eval,
+                    best_move_idx: Some(table_entry.best_move_idx as usize)
+                }
+            };
+
             match table_entry.entry_type {
-                transpos::EntryType::Exact | transpos::EntryType::LowerBound => {
-                    // TODO: Does it actually matter if it's the lower bound or not?
-                    return SearchResult {
-                        eval: table_entry.eval,
-                        best_move_idx: Some(table_entry.best_move_idx as usize)
-                    };
-                },
-                transpos::EntryType::UpperBound => {
-                    if table_entry.eval >= upper_bound {
-                        // Beta cut-off
-                        return SearchResult {
-                            eval: table_entry.eval,
-                            best_move_idx: Some(table_entry.best_move_idx as usize)
-                        };
-                    } else {
-                        // Just use the best move
-                        table_best_move = Some(table_entry.best_move_idx);
+                transpos::EntryType::FailLow => {
+                    // Exceeds our lower bound, do a cutoff
+                    if table_entry.eval <= lower_bound {
+                        return get_table_result();
                     }
+                },
+                transpos::EntryType::FailHigh => {
+                    if table_entry.eval >= upper_bound {
+                        // Exceeds our upper bound, do a cutoff
+                        return get_table_result();
+                    }
+                },
+                transpos::EntryType::Exact => {
+                    // Exact node, no further searching is needed
+                    return get_table_result();
                 },
                 _ => {
                     panic!("Invalid or unsupported entry type: {}", table_entry.entry_type as usize);
@@ -195,9 +199,10 @@ fn _search(
             }
         } else {
             // From a lower depth, so not super useful
-            // However, we can still use the best move
-            table_best_move = Some(table_entry.best_move_idx);
         }
+
+        // If we didn't hit a quick return, we can still use the best move from this entry
+        table_best_move = Some(table_entry.best_move_idx);
     }
 
     if depth_remaining > 0 {
@@ -251,7 +256,6 @@ fn _search(
 
         let mut best_eval = -VALUE_INF;
         let mut best_move_idx: usize = 0;
-        let mut upper_bound_hit = false;
         for i in 0..moves.len() {
             let move_idx = rated_moves[i].idx;
             let mv = &moves[move_idx];
@@ -283,8 +287,7 @@ fn _search(
                 }
 
                 if next_eval >= upper_bound {
-                    // Beta cut-off
-                    upper_bound_hit = true;
+                    // Failed high, beta cut-off
                     break
                 }
             }
@@ -296,7 +299,15 @@ fn _search(
                 eval: best_eval,
                 best_move_idx: best_move_idx as u8,
                 depth_remaining,
-                entry_type: if upper_bound_hit { transpos::EntryType::UpperBound } else { transpos::EntryType::Exact },
+                entry_type: {
+                    if best_eval >= upper_bound {
+                        transpos::EntryType::FailHigh
+                    } else if best_eval <= lower_bound {
+                        transpos::EntryType::FailLow
+                    } else {
+                        transpos::EntryType::Exact
+                    }
+                },
                 age_count: 0 // Will be set by the transposition table
             }
         );
@@ -316,14 +327,42 @@ fn _search(
 
 pub fn search(
     board: &Board, table: &mut transpos::Table, depth: u8,
+    guessed_eval: Option<Value>,
     stop_flag: &ThreadFlag, stop_time: Option<std::time::Instant>) -> (SearchResult, SearchInfo) {
 
     let mut search_info = SearchInfo::new();
-    let search_result = _search(
-        board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
-    );
 
-    (search_result, search_info)
+    // Use a growing aspiration window
+    const WINDOW_RANGE_GUESS: Value = 0.3; // Range of the window if there is a guessed eval
+    const WINDOW_RANGE_NO_GUESS: Value = 1.0; // Range of the window if there isn't guessed eval
+    const WINDOW_PAD: Value = 5.0; // Amount to pad the window after it fails
+    let window_start_center = if guessed_eval.is_some() { guessed_eval.unwrap() } else { eval_board(board) };
+
+    let mut window_min = window_start_center;
+    let mut window_max = window_start_center;
+
+    if guessed_eval.is_some() {
+        window_min -= WINDOW_RANGE_GUESS / 2.0;
+        window_max += WINDOW_RANGE_GUESS / 2.0;
+    } else {
+        window_min -= WINDOW_RANGE_NO_GUESS / 2.0;
+        window_max += WINDOW_RANGE_NO_GUESS / 2.0;
+    }
+
+    loop {
+        let search_result = _search(
+            board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+        );
+
+        if search_result.eval > window_max {
+            window_max = search_result.eval + WINDOW_PAD;
+        } else if search_result.eval < window_min {
+            window_min = search_result.eval - WINDOW_PAD;
+        } else {
+            // Window was sufficient
+            return (search_result, search_info);
+        }
+    }
 }
 
 pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {

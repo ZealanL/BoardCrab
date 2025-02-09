@@ -46,13 +46,17 @@ impl AsyncEngine {
         self.thread_join_handle = Some(
             thread::spawn(move || {
                 let mut latest_best_move_idx = None;
+                let mut guessed_next_eval: Option<Value> = None;
                 for depth_minus_one in 0..max_depth {
                     let depth = depth_minus_one + 1;
                     let mut table = arc_table.lock().unwrap();
                     let (search_result, search_info) = search::search(
-                        &board, &mut table,
-                        depth, &stop_flag, stop_time
+                        &board, &mut table, depth,
+                        guessed_next_eval,
+                        &stop_flag, stop_time
                     );
+
+                    guessed_next_eval = Some(search_result.eval);
 
                     if search_result.best_move_idx.is_some() {
                         // TODO: Somewhat lame to be calling UCI stuff from async_engine
