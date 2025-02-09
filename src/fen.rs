@@ -12,23 +12,23 @@ impl std::fmt::Display for FenError {
     }
 }
 
-pub fn load_fen(fen: &str) -> Result<Board> {
-    // Based off of https://github.com/ZealanL/BoardMouse/blob/main/src/FEN/FEN.cpp
-
+// Based off of https://github.com/ZealanL/BoardMouse/blob/main/src/FEN/FEN.cpp
+pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
     let throw_err = |msg: &str| ->Result<Board>{
+        let fen = fen_parts.join(" ");
         Err(FenError(format!("Invalid fen: \"{}\", {}", fen, msg)))?
     };
 
     let mut board = Board::new();
 
-    let fen_parts = fen.split(" ").collect::<Vec<&str>>();
-
     if fen_parts.len() < 2 {
         throw_err("fen needs at least 2 parts (position and turn)")?;
     }
 
-    if !fen.is_ascii() {
-        throw_err("fen is not ascii")?;
+    for part in fen_parts {
+        if !part.is_ascii() {
+            throw_err("fen is not ascii")?;
+        }
     }
 
     // Parse pieces
@@ -97,7 +97,7 @@ pub fn load_fen(fen: &str) -> Result<Board> {
 
     // Parse turn
     {
-        let turn_str = fen_parts[1];
+        let turn_str = &fen_parts[1];
         if turn_str.len() != 1 {
             throw_err(format!("invalid turn token \"{turn_str}\", bad length").as_str())?;
         }
@@ -114,7 +114,7 @@ pub fn load_fen(fen: &str) -> Result<Board> {
 
     // Read castle rights
     if fen_parts.len() >= 3 {
-        let castle_str = fen_parts[2];
+        let castle_str = &fen_parts[2];
         if castle_str == "-" {
             // No castling
         } else {
@@ -137,7 +137,7 @@ pub fn load_fen(fen: &str) -> Result<Board> {
 
     // Read en passant coordinate
     if fen_parts.len() >= 4 {
-        let en_passant_str = fen_parts[3];
+        let en_passant_str = &fen_parts[3];
         if en_passant_str == "-" {
             // No en passant
         } else {
@@ -156,7 +156,7 @@ pub fn load_fen(fen: &str) -> Result<Board> {
 
     // Read half-move counter
     if fen_parts.len() >= 5 {
-        let half_move_counter = fen_parts[4];
+        let half_move_counter = &fen_parts[4];
         match half_move_counter.parse::<u8>() {
             Ok(x) => { board.half_move_counter = x },
             _ => { throw_err(format!("invalid half-move counter \"{half_move_counter}\"").as_str())?; }
@@ -169,6 +169,11 @@ pub fn load_fen(fen: &str) -> Result<Board> {
     board.full_update();
 
     Ok(board)
+}
+
+pub fn load_fen(fen: &str) -> Result<Board> {
+    let fen_parts = fen.split(" ").map(|v| v.to_string()).collect::<Vec<String>>();
+    load_fen_from_parts(&fen_parts)
 }
 
 pub fn make_fen(board: &Board) -> String {

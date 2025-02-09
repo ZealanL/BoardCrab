@@ -4,10 +4,14 @@ pub mod search;
 pub mod move_gen;
 pub mod eval;
 pub mod transpos;
+pub mod uci;
+pub mod async_engine;
+pub mod thread_flag;
 
 mod bitmask;
 mod lookup_gen;
 mod zobrist;
+
 
 static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 

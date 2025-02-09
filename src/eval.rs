@@ -11,7 +11,7 @@ pub fn eval_to_str(eval: Value) -> String {
     if eval.abs() >= VALUE_CHECKMATE_MIN {
         let mate_move_count = VALUE_CHECKMATE - eval.abs();
         let ply_till_mate = (mate_move_count * eval.signum()) as i64;
-        format!("mate {}", (ply_till_mate + 1) / 2)
+        format!("#{}", (ply_till_mate + 1) / 2)
     } else {
         eval.to_string()
     }
@@ -33,7 +33,7 @@ const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.05, 3.33, 5.63, 9.5];
 fn eval_team(board: &Board, team_idx: usize) -> Value {
     let mut value: Value = 0.0;
     for piece_idx in 0..NUM_PIECES_NO_KING {
-        for piece_pos in bm_itr_bits(board.pieces[team_idx][piece_idx]) {
+        for _piece_pos in bm_itr_bits(board.pieces[team_idx][piece_idx]) {
             value += PIECE_BASE_VALUES[piece_idx];
         }
     }
@@ -108,4 +108,8 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
     }
 
     eval
+}
+
+pub fn to_centipawns(value: Value) -> i64 {
+    (value * 100.0).round() as i64
 }

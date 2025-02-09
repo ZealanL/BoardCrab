@@ -1,7 +1,10 @@
+use std::collections::HashSet;
 use crate::board::*;
 use crate::eval::*;
-use crate::move_gen;
+use crate::{move_gen, zobrist};
+use crate::move_gen::MoveBuffer;
 use crate::transpos;
+use crate::thread_flag::ThreadFlag;
 
 fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usize {
     let mut moves = move_gen::MoveBuffer::new();
@@ -116,10 +119,34 @@ pub struct SearchResult {
     pub best_move_idx: Option<usize> // May not exist if at depth 0
 }
 
-pub fn search(board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo, mut lower_bound: Value, upper_bound: Value, depth_remaining: u8, depth_elapsed: u8) -> SearchResult {
-    search_info.total_nodes += 1;
+pub fn search(
+    board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
+    mut lower_bound: Value, upper_bound: Value,
+    depth_remaining: u8, depth_elapsed: u8,
+    stop_flag: &ThreadFlag, stop_time: Option<std::time::Instant>) -> SearchResult {
 
-    let mut table_entry = table.get(board.hash);
+    search_info.total_nodes += 1;
+    if depth_remaining > 2 { // No point in checking at a super low depth
+        let mut stop = false;
+
+        if stop_flag.get() {
+            stop = true;
+        } else if stop_time.is_some() {
+            // TODO: Is this slow?
+            if std::time::Instant::now() >= stop_time.unwrap() {
+                stop = true
+            }
+        }
+
+        if stop {
+            return SearchResult {
+                eval: 0.0,
+                best_move_idx: None
+            };
+        }
+    }
+
+    let table_entry = table.get(board.hash);
 
     let mut table_best_move: Option<u8> = None;
     if table_entry.is_valid() {
@@ -214,8 +241,12 @@ pub fn search(board: &Board, table: &mut transpos::Table, search_info: &mut Sear
             let mut next_board: Board = board.clone();
             next_board.do_move(mv);
 
-            let next_result =
-                search(&next_board, table, search_info, -upper_bound, -lower_bound, depth_remaining - 1, depth_elapsed + 1);
+            let next_result = search(
+                    &next_board, table, search_info,
+                    -upper_bound, -lower_bound,
+                    depth_remaining - 1, depth_elapsed + 1,
+                    stop_flag, stop_time
+            );
             let next_eval = decay_eval(-next_result.eval);
 
             if next_eval > best_eval {
@@ -255,4 +286,42 @@ pub fn search(board: &Board, table: &mut transpos::Table, search_info: &mut Sear
             best_move_idx: None
         }
     }
+}
+
+pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
+    let mut result = Vec::new();
+    let mut found_hashes = HashSet::<zobrist::Hash>::new();
+
+    loop {
+
+        let entry = table.get(board.hash);
+        if entry.hash == board.hash {
+            if found_hashes.contains(&board.hash) {
+                // Looped position
+                break;
+            } else {
+                found_hashes.insert(board.hash);
+            }
+
+            let mut moves = MoveBuffer::new();
+            move_gen::generate_moves(&board, &mut moves);
+
+            let best_move_idx = entry.best_move_idx as usize;
+            if best_move_idx >= moves.len() {
+                panic!("Failed to generate PV, bad move count (hash collision?)");
+            }
+
+            let best_move = moves[best_move_idx];
+            result.push(best_move);
+            board.do_move(&best_move);
+        } else {
+            break;
+        }
+    }
+
+    if result.is_empty() {
+        panic!("Failed to generate PV, first table entry never found");
+    }
+
+    result
 }
