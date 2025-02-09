@@ -29,7 +29,7 @@ pub fn print_search_results(board: &Board, table: &transpos::Table, depth: u8, e
     if eval.abs() >= VALUE_CHECKMATE_MIN {
         eval_str = eval_to_str(eval).replace("#", "mate ");
     } else {
-        eval_str = format!("cp {}", eval.round() as i64);
+        eval_str = format!("cp {}", (eval * 100.0).round() as i64);
     }
 
     let multipv = 1;
