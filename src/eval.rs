@@ -238,9 +238,54 @@ fn eval_team(board: &Board, team_idx: usize) -> Value {
         + eval_king_safety(board, team_idx, opp_attack_power)
 }
 
+// Returns true if the player can possibly checkmate the other
+fn is_checkmate_possible(board: &Board, team_idx: usize) -> bool {
+    // TODO: count_ones() is not needed here
+
+    if board.pieces[team_idx][PIECE_PAWN] != 0 {
+        return true;
+    }
+
+    let occ = board.occupancy[team_idx];
+    let piece_count = occ.count_ones() - 1; // Not including the king
+    if piece_count >= 3 {
+        true
+    } else if piece_count == 2 {
+        // Not a checkmate if we have two knights
+        // (Unless the opponent throws, but we don't care)
+        !(board.pieces[team_idx][PIECE_KNIGHT].count_ones() == 2)
+    } else if piece_count == 1 {
+        // We must have a rook or a queen
+        (board.pieces[team_idx][PIECE_ROOK] | board.pieces[team_idx][PIECE_QUEEN]) != 0
+    } else {
+        // No pieces
+        false
+    }
+}
+
 // Evaluates the position from the perspective of the current turn
 pub fn eval_board(board: &Board) -> Value {
-    eval_team(board, board.turn_idx) - eval_team(board, 1 - board.turn_idx)
+    let self_eval = eval_team(board, board.turn_idx);
+    let opp_eval = eval_team(board, 1 - board.turn_idx);
+
+    if (self_eval + opp_eval) < 15.0 {
+        // Check for insufficient material draw
+
+        let mut checkmate_possible: bool = false;
+        for team_idx in 0..2 {
+            // TODO: count_ones() is not needed here
+            if is_checkmate_possible(board, team_idx) {
+                checkmate_possible = true;
+                break;
+            }
+        }
+
+        if !checkmate_possible {
+            return 0.0;
+        }
+    }
+
+    self_eval - opp_eval
 }
 
 pub fn print_eval(board: &Board) {
@@ -248,11 +293,11 @@ pub fn print_eval(board: &Board) {
 
     let attack_power = [calc_attacking_power(board, 0), calc_attacking_power(board, 1)];
     println!(
-        "{:<12} | {:<12} | {:<12} | {:<12} | {:<12} | {:<12}",
+        "{:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
         "", "Material", "King Safety", "Pawns", "Pieces", "Mobility"
     );
     for i in 0..2 {
-        println!("{:>12} | {:<12} | {:<12} | {:<12} | {:<12} | {:<12}",
+        println!("{:>12} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
             ["White", "Black"][i],
             eval_material(board, i),
             eval_king_safety(board, i, attack_power[1 - i]),
