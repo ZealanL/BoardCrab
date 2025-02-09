@@ -140,7 +140,7 @@ pub fn search(
 
         if stop {
             return SearchResult {
-                eval: 0.0,
+                eval: VALUE_INF,
                 best_move_idx: None
             };
         }
@@ -247,8 +247,16 @@ pub fn search(
                     depth_remaining - 1, depth_elapsed + 1,
                     stop_flag, stop_time
             );
-            let next_eval = decay_eval(-next_result.eval);
 
+            if next_result.eval == VALUE_INF {
+                // Search aborted
+                return SearchResult {
+                    eval: VALUE_INF,
+                    best_move_idx: None
+                }
+            }
+
+            let next_eval = decay_eval(-next_result.eval);
             if next_eval > best_eval {
                 best_eval = next_eval;
                 best_move_idx = move_idx;

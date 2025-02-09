@@ -30,6 +30,7 @@ pub fn decay_eval(eval: Value) -> Value {
 // From the AlphaZero paper: https://arxiv.org/pdf/2009.04374
 const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.05, 3.33, 5.63, 9.5];
 
+
 fn eval_team(board: &Board, team_idx: usize) -> Value {
     let mut value: Value = 0.0;
     for piece_idx in 0..NUM_PIECES_NO_KING {
