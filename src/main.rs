@@ -1,5 +1,3 @@
-use board_crab_lib::board::*;
-use board_crab_lib::move_gen;
 use board_crab_lib::uci;
 use board_crab_lib::async_engine::AsyncEngine;
 
@@ -16,7 +14,7 @@ fn main() {
         }
     }));
 
-    let mut engine = AsyncEngine::new(50);
+    let mut engine = AsyncEngine::new(100);
 
     loop {
         let mut input = String::new();

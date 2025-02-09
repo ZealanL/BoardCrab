@@ -195,7 +195,7 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
             continue;
         }
 
-        for from in bm_itr_bits(board.pieces[board.turn_idx][piece_idx]) {
+        for from in bm_iter_bits(board.pieces[board.turn_idx][piece_idx]) {
             let idx = bm_to_idx(from);
             let mut tos: BitMask;
             if piece_idx == PIECE_PAWN {
@@ -257,7 +257,7 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                 tos &= move_mask;
             }
 
-            for to in bm_itr_bits(tos) {
+            for to in bm_iter_bits(tos) {
                 let mut flags: u8 = 0;
                 if piece_idx == PIECE_PAWN {
                     const PROMOTE_MASK: [BitMask; 2] = [bm_make_row(7), bm_make_row(0)];

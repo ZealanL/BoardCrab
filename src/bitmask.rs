@@ -59,7 +59,7 @@ pub fn bm_set(mask: &mut BitMask, x: i64, y: i64, val: bool) {
     }
 }
 
-pub const fn bm_shift(mask: BitMask, x: i64, y: i64) -> BitMask{
+pub const fn bm_shift(mask: BitMask, x: i64, y: i64) -> BitMask {
     let shift_amount = x + y * 8;
     if shift_amount >= 0 {
         mask << shift_amount
@@ -87,7 +87,7 @@ pub struct ItrBits {
     remaining_mask: BitMask
 }
 
-pub fn bm_itr_bits(mask: BitMask) -> ItrBits {
+pub fn bm_iter_bits(mask: BitMask) -> ItrBits {
     ItrBits{ remaining_mask: mask }
 }
 

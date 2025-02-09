@@ -163,7 +163,7 @@ impl Board {
 
             for team_idx in 0..2 {
                 for piece_idx in 0..NUM_PIECES {
-                    for piece_mask in bm_itr_bits(self.pieces[team_idx][piece_idx]) {
+                    for piece_mask in bm_iter_bits(self.pieces[team_idx][piece_idx]) {
                         let pos_idx = bm_to_idx(piece_mask);
                         self.hash ^= zobrist::hash_piece(team_idx, piece_idx, pos_idx);
                     }
@@ -193,7 +193,7 @@ impl Board {
         let opp_king = self.pieces[1 - team_idx][PIECE_KING];
 
         for piece_idx in 0..NUM_PIECES {
-            for from in bm_itr_bits(self.pieces[team_idx][piece_idx]) {
+            for from in bm_iter_bits(self.pieces[team_idx][piece_idx]) {
                 let piece_attacks = move_gen::generate_attacks(self, team_idx, piece_idx, from);
 
                 match piece_idx {

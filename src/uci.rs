@@ -170,6 +170,10 @@ pub fn process_cmd(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
         }
         "position" => cmd_position(parts, engine),
         "go" => cmd_go(parts, engine),
+        "eval" => {
+            print_eval(engine.get_board());
+            true
+        },
         "stop" => {
             engine.stop_search();
             true
