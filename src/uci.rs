@@ -123,7 +123,8 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
     }
 
     let mut max_depth: u8 = u8::MAX;
-    let mut max_time_ms: Option<u64> = None;
+    let mut max_time: Option<f64> = None;
+    let mut remaining_times: [Option<f64>; 2] = [None; 2];
 
     for pair in pairs {
         match pair.0.as_str() {
@@ -131,7 +132,13 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
                 max_depth = pair.1 as u8;
             },
             "movetime" => {
-                max_time_ms = Some(pair.1 as u64);
+                max_time = Some(pair.1 as f64 / 1000.0);
+            }
+            "wtime" => {
+                remaining_times[0] = Some(pair.1 as f64 / 1000.0);
+            }
+            "btime" => {
+                remaining_times[1] = Some(pair.1 as f64 / 1000.0);
             }
             _ => {
 
@@ -141,8 +148,9 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
             max_depth = pair.1 as u8;
         }
     }
+    let remaining_time = remaining_times[engine.get_board().turn_idx];
+    engine.start_search(max_depth, max_time, remaining_time);
 
-    engine.start_search(max_depth, max_time_ms);
     true
 }
 

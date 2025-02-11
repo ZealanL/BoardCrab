@@ -9,6 +9,7 @@ use crate::move_gen::MoveBuffer;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 use crate::uci;
+use crate::time_manager;
 
 pub struct AsyncEngine {
     board: Board,
@@ -27,15 +28,27 @@ impl AsyncEngine {
         }
     }
 
-    pub fn start_search(&mut self, max_depth: u8, max_time_ms: Option<u64>) {
+    pub fn start_search(&mut self, max_depth: u8, max_time: Option<f64>, remaining_time: Option<f64>) {
         self.stop_search();
 
         let start_time = std::time::Instant::now();
-        let stop_time: Option<std::time::Instant>;
-        if max_time_ms.is_some() {
-            stop_time = Some(std::time::Instant::now() + std::time::Duration::from_millis(max_time_ms.unwrap()));
+        let mut stop_time: Option<std::time::Instant>;
+        if max_time.is_some() {
+            stop_time = Some(start_time + std::time::Duration::from_secs_f64(max_time.unwrap()));
         } else {
             stop_time = None;
+        }
+
+        if remaining_time.is_some() {
+            let allotted_time = time_manager::get_time_to_use(&self.board, remaining_time.unwrap());
+            let desired_stop_time = start_time + std::time::Duration::from_secs_f64(allotted_time);
+
+            if stop_time.is_some() {
+                // We already have a stop time, take the minimum of the two
+                stop_time = Some(stop_time.unwrap().min(desired_stop_time));
+            } else {
+                stop_time = Some(desired_stop_time);
+            }
         }
 
         let board = self.board.clone();
@@ -46,6 +59,7 @@ impl AsyncEngine {
             thread::spawn(move || {
                 let mut latest_best_move_idx = None;
                 let mut guessed_next_eval: Option<Value> = None;
+
                 for depth_minus_one in 0..max_depth {
                     let depth = depth_minus_one + 1;
                     let mut table = arc_table.lock().unwrap();
