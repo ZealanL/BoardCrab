@@ -27,7 +27,7 @@ pub fn decay_eval(eval: Value) -> Value {
 
 //////////////////////////////////////////////////////////
 
-const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.2, 3.5, 5.5, 10.0];
+const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.2, 3.5, 5.2, 10.0];
 
 // Returns the "attacking power" of a team from 0-1
 // This is meant to represent how capable the player is of making a deadly attack on the king
@@ -136,7 +136,7 @@ fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value 
             let promote_threat_scale = 1.0 - (opp_attack_power * 0.7);
 
             if is_passed {
-                promote_thread_value = promote_ratio_sq * 4.0 * promote_threat_scale;
+                promote_thread_value = promote_ratio_sq * 3.0 * promote_threat_scale;
             } else {
                 promote_thread_value = promote_ratio_sq * 1.0 * promote_threat_scale;
             }
@@ -151,7 +151,7 @@ fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value 
 
         let is_isolated = ((pawns & !pawn) & columns) == 0;
         if is_isolated {
-            value += -0.3 * (1.0 - opp_attack_power*0.3);
+            value += -0.2 * (1.0 - opp_attack_power*0.3);
         }
 
         // TODO: Penalize backwards pawns?
@@ -160,9 +160,18 @@ fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value 
     value
 }
 
+fn eval_center_control(board: &Board, team_idx: usize) -> Value {
+    const CENTER_12: BitMask = 0x183c3c180000; // Center-most 12 squares
+
+    let attack_center_count = (board.attacks[team_idx] & CENTER_12).count_ones();
+    let pawns_in_center = (board.pieces[team_idx][PIECE_PAWN] & CENTER_12).count_ones();
+
+    (attack_center_count as Value) * 0.05
+    + (pawns_in_center as Value) * 0.05
+}
+
 fn eval_mobility(board: &Board, team_idx: usize) -> Value {
-    // Other pieces are not considered
-    let move_options = board.attacks[team_idx] & !board.occupancy[team_idx];
+    let move_options = board.attacks[team_idx];
     (move_options.count_ones() as Value) * 0.03 // Per square-attacked
 }
 
@@ -204,15 +213,11 @@ fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> 
     let king_height_frac = ((king_y - back_rank_y).abs() as Value) / 8.0;
     let king_off_center_frac = (((king_x as Value) - 3.5).abs() / 3.5).min(0.8); // We don't care about the very corner
 
-    let attack_count = (board.attacks[team_idx] & squares_around_king).count_ones();
-    let attack_frac = (attack_count as Value) / 4.0;
-
     // TODO: Implement king accessibility by pretending the king is a queen
 
-    ((pawn_coverage_frac * 1.3)
-        + (king_height_frac * -3.0)
-        + (king_off_center_frac * 1.0)
-        + (attack_frac * -1.3)
+    ((pawn_coverage_frac * 1.5)
+        + (king_height_frac * -2.0)
+        + (king_off_center_frac * 0.75)
     ) * opp_attack_power
 }
 
@@ -227,12 +232,15 @@ fn eval_material(board: &Board, team_idx: usize) -> Value {
     material_value
 }
 
+pub static SPECIAL_FLAG: bool = false;
+
 fn eval_team(board: &Board, team_idx: usize) -> Value {
     let opp_attack_power = calc_attacking_power(board, 1 - team_idx);
 
     eval_material(board, team_idx)
         + eval_pawns(board, team_idx, opp_attack_power)
         + eval_piece_masked_positioning(board, team_idx, opp_attack_power)
+        + eval_center_control(board, team_idx)
         + eval_mobility(board, team_idx)
         + eval_king_safety(board, team_idx, opp_attack_power)
 }
@@ -292,16 +300,17 @@ pub fn print_eval(board: &Board) {
 
     let attack_power = [calc_attacking_power(board, 0), calc_attacking_power(board, 1)];
     println!(
-        "{:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
-        "", "Material", "King Safety", "Pawns", "Pieces", "Mobility"
+        "{:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
+        "", "Material", "King Safety", "Pawns", "Pieces", "Center Ctrl", "Mobility"
     );
     for i in 0..2 {
-        println!("{:>14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
+        println!("{:>14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
             ["White", "Black"][i],
             eval_material(board, i),
             eval_king_safety(board, i, attack_power[1 - i]),
             eval_pawns(board, i, attack_power[1 - i]),
             eval_piece_masked_positioning(board, i, attack_power[1 - i]),
+            eval_center_control(board, i),
             eval_mobility(board, i)
         );
     }

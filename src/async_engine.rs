@@ -66,7 +66,7 @@ impl AsyncEngine {
                     let (search_result, search_info) = search::search(
                         &board, &mut table, depth,
                         guessed_next_eval,
-                        &stop_flag, stop_time
+                        Some(&stop_flag), stop_time
                     );
 
                     guessed_next_eval = Some(search_result.eval);

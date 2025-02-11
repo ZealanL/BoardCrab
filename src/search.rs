@@ -131,7 +131,7 @@ fn _search(
     board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: u8,
-    stop_flag: &ThreadFlag, stop_time: Option<std::time::Instant>) -> SearchResult {
+    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> SearchResult {
 
     search_info.total_nodes += 1;
 
@@ -149,10 +149,10 @@ fn _search(
     }
     search_info.depth_hashes[depth_elapsed as usize] = board.hash;
 
-    if depth_remaining > 2 { // No point in checking at a super low depth
+    if depth_remaining >= 3 { // No point in checking at a super low depth
         let mut stop = false;
 
-        if stop_flag.get() {
+        if stop_flag.is_some() && stop_flag.unwrap().get() {
             stop = true;
         } else if stop_time.is_some() {
             // TODO: Is this slow?
@@ -360,40 +360,49 @@ fn _search(
 pub fn search(
     board: &Board, table: &mut transpos::Table, depth: u8,
     guessed_eval: Option<Value>,
-    stop_flag: &ThreadFlag, stop_time: Option<std::time::Instant>) -> (SearchResult, SearchInfo) {
+    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (SearchResult, SearchInfo) {
 
     let mut search_info = SearchInfo::new();
 
-    // Use a growing aspiration window
-    const WINDOW_RANGE_GUESS: Value = 0.3; // Range of the window if there is a guessed eval
-    const WINDOW_RANGE_NO_GUESS: Value = 1.0; // Range of the window if there isn't guessed eval
-    const WINDOW_PAD: Value = 5.0; // Amount to pad the window after it fails
-    let window_start_center = if guessed_eval.is_some() { guessed_eval.unwrap() } else { eval_board(board) };
+    if depth >= 4 {
+        // Use a growing aspiration window
+        const WINDOW_RANGE_GUESS: Value = 0.3; // Range of the window if there is a guessed eval
+        const WINDOW_RANGE_NO_GUESS: Value = 1.0; // Range of the window if there isn't guessed eval
+        const WINDOW_PAD: Value = 5.0; // Amount to pad the window after it fails
+        let window_start_center = if guessed_eval.is_some() { guessed_eval.unwrap() } else { eval_board(board) };
 
-    let mut window_min = window_start_center;
-    let mut window_max = window_start_center;
+        let mut window_min = window_start_center;
+        let mut window_max = window_start_center;
 
-    if guessed_eval.is_some() {
-        window_min -= WINDOW_RANGE_GUESS / 2.0;
-        window_max += WINDOW_RANGE_GUESS / 2.0;
+        if guessed_eval.is_some() {
+            window_min -= WINDOW_RANGE_GUESS / 2.0;
+            window_max += WINDOW_RANGE_GUESS / 2.0;
+        } else {
+            window_min -= WINDOW_RANGE_NO_GUESS / 2.0;
+            window_max += WINDOW_RANGE_NO_GUESS / 2.0;
+        }
+
+        loop {
+            let search_result = _search(
+                board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+            );
+
+            if search_result.eval > window_max {
+                window_max = search_result.eval + WINDOW_PAD;
+            } else if search_result.eval < window_min {
+                window_min = search_result.eval - WINDOW_PAD;
+            } else {
+                // Window was sufficient
+                return (search_result, search_info);
+            }
+        }
     } else {
-        window_min -= WINDOW_RANGE_NO_GUESS / 2.0;
-        window_max += WINDOW_RANGE_NO_GUESS / 2.0;
-    }
-
-    loop {
+        // Very low-depth, aspiration window isn't as helpful
         let search_result = _search(
-            board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+            board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
         );
 
-        if search_result.eval > window_max {
-            window_max = search_result.eval + WINDOW_PAD;
-        } else if search_result.eval < window_min {
-            window_min = search_result.eval - WINDOW_PAD;
-        } else {
-            // Window was sufficient
-            return (search_result, search_info);
-        }
+        (search_result, search_info)
     }
 }
 
