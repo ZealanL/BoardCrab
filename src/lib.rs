@@ -17,6 +17,7 @@ static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 
 fn _init() {
     lookup_gen::init();
+    #[cfg(not(debug_assertions))]
     lookup_gen_magic::init();
     zobrist::init();
 }
