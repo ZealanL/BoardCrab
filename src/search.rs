@@ -278,15 +278,24 @@ fn _search(
         let mut best_move_idx: usize = 0;
         for i in 0..moves.len() {
             let move_idx = rated_moves[i].idx;
+            let move_eval = rated_moves[i].eval;
             let mv = &moves[move_idx];
 
             let mut next_board: Board = board.clone();
             next_board.do_move(mv);
 
+            // Late move reduction
+            let mut depth_reduction: u8 = 0;
+            if i >= 6 && depth_remaining == 2
+                && best_eval < lower_bound
+                && (mv.is_quiet() || move_eval < 0.0) {
+                depth_reduction = 1;
+            }
+
             let next_result = _search(
                     &next_board, table, search_info,
                     -upper_bound, -lower_bound,
-                    depth_remaining - 1, depth_elapsed + 1,
+                    depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
                     stop_flag, stop_time
             );
 
