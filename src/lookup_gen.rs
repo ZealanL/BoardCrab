@@ -1,5 +1,6 @@
 use crate::bitmask::*;
 use crate::board::*;
+use crate::lookup_gen_magic;
 
 // Basic lookup tables for possible moves
 static mut LT_KNIGHT_MOVE: [BitMask; 64] = [0; 64];
@@ -164,7 +165,7 @@ pub fn walk_in_dir<const SHIFT: i64>(start: BitMask, inv_occ: BitMask) -> BitMas
 }
 
 // TODO: Move this stuff to move_gen maybe?
-fn generate_slider_tos<const ROOK: bool, const BISHOP: bool>(piece_pos: BitMask, occupy: BitMask) -> BitMask {
+fn generate_slider_tos_slow<const ROOK: bool, const BISHOP: bool>(piece_pos: BitMask, occupy: BitMask) -> BitMask {
     // TODO: This is very slow
     let inv_occ = !occupy;
 
@@ -199,11 +200,24 @@ pub fn get_piece_base_tos(piece_idx: usize, pos_idx: usize) -> BitMask {
     }
 }
 
-pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize, occupy: BitMask) -> BitMask {
+pub fn get_slider_tos_slow(piece_idx: usize, piece_pos_idx: usize, occupy: BitMask) -> BitMask {
     match piece_idx {
-        PIECE_BISHOP => generate_slider_tos::<false, true>(piece_pos, occupy),
-        PIECE_ROOK => generate_slider_tos::<true, false>(piece_pos, occupy),
-        PIECE_QUEEN => generate_slider_tos::<true, true>(piece_pos, occupy),
+        PIECE_BISHOP => generate_slider_tos_slow::<false, true>(bm_from_idx(piece_pos_idx), occupy),
+        PIECE_ROOK => generate_slider_tos_slow::<true, false>(bm_from_idx(piece_pos_idx), occupy),
+        PIECE_QUEEN => generate_slider_tos_slow::<true, true>(bm_from_idx(piece_pos_idx), occupy),
+        _ => {
+            panic!("Piece is not a slider")
+        }
+    }
+}
+
+pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize, _occupy: BitMask) -> BitMask {
+    let occupy = _occupy & !piece_pos;
+
+    match piece_idx {
+        PIECE_BISHOP => lookup_gen_magic::get_bishop_moves(piece_pos_idx, occupy),
+        PIECE_ROOK => lookup_gen_magic::get_rook_moves(piece_pos_idx, occupy),
+        PIECE_QUEEN => lookup_gen_magic::get_bishop_moves(piece_pos_idx, occupy) | lookup_gen_magic::get_rook_moves(piece_pos_idx, occupy),
         _ => { // Non-sliding
             get_piece_base_tos(piece_idx, piece_pos_idx)
         },

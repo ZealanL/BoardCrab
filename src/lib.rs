@@ -8,15 +8,15 @@ pub mod uci;
 pub mod async_engine;
 pub mod thread_flag;
 pub mod zobrist;
-
-mod bitmask;
-mod lookup_gen;
-
+pub mod bitmask;
+pub mod lookup_gen;
+pub mod lookup_gen_magic;
 
 static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 
 fn _init() {
     lookup_gen::init();
+    lookup_gen_magic::init();
     zobrist::init();
 }
 
