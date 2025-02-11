@@ -133,10 +133,10 @@ fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value 
         {
             let promote_ratio = ((pawn_rel_y - 1) as Value) / 6.0;
             let promote_ratio_sq = promote_ratio * promote_ratio;
-            let promote_threat_scale = 1.0 - (opp_attack_power * 0.6);
+            let promote_threat_scale = 1.0 - (opp_attack_power * 0.7);
 
             if is_passed {
-                promote_thread_value = promote_ratio_sq * 3.0 * promote_threat_scale;
+                promote_thread_value = promote_ratio_sq * 4.0 * promote_threat_scale;
             } else {
                 promote_thread_value = promote_ratio_sq * 1.0 * promote_threat_scale;
             }
