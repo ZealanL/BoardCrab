@@ -197,6 +197,33 @@ fn _search(
         table_best_move = Some(table_entry.best_move_idx);
     }
 
+    // Null move pruning
+    // https://www.chessprogramming.org/Null_Move_Pruning
+    if board.checkers == 0 &&
+        depth_remaining >= 4 &&
+        depth_elapsed >= 2
+    {
+        let king_and_pawn = board.pieces[board.turn_idx][PIECE_PAWN] | board.pieces[board.turn_idx][PIECE_KING];
+        let is_king_and_pawn = board.occupancy[board.turn_idx] == king_and_pawn;
+        if !is_king_and_pawn {
+            let mut next_board = board.clone();
+            next_board.do_null_move();
+
+            let depth_reduction = depth_remaining / 3;
+            let next_result = _search(
+                &next_board, &table, search_info,
+                -upper_bound, -lower_bound,
+                depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
+                stop_flag, stop_time
+            );
+
+            let next_eval = decay_eval(-next_result);
+            if next_eval >= upper_bound {
+                return next_eval;
+            }
+        }
+    }
+
     if depth_remaining > 0 {
         let mut moves = MoveBuffer::new();
         move_gen::generate_moves(&board, &mut moves);
@@ -214,6 +241,7 @@ fn _search(
         for i in 0..moves.len() {
             let mv = moves[i];
             let is_quiet = mv.is_quiet();
+
             let move_score;
             if is_quiet {
                 let history_counter = search_info.history_counters[mv.from_piece_idx][bm_to_idx(mv.to)];
@@ -240,7 +268,7 @@ fn _search(
         }
 
         // Insertion sort
-        for i in 1..moves.len() {
+        for i in 1..rated_moves.len() {
             let mut j = i;
             while j > 0 {
                 let prev = rated_moves[j - 1];
@@ -260,7 +288,7 @@ fn _search(
 
         let mut best_eval = -VALUE_INF;
         let mut best_move_idx: usize = 0;
-        for i in 0..moves.len() {
+        for i in 0..rated_moves.len() {
             let move_idx = rated_moves[i].idx;
             let move_eval = rated_moves[i].eval;
             let mv = &moves[move_idx];

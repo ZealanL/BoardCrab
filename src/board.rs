@@ -342,9 +342,12 @@ impl Board {
     }
 
     pub fn do_null_move(&mut self) {
+        self.hash ^= zobrist::hash_en_passant(self.en_passant_mask);
         self.en_passant_mask = 0;
         self.update_attacks(self.turn_idx);
         self.turn_idx = 1 - self.turn_idx;
+
+        self.hash ^= zobrist::hash_turn();
     }
 }
 
