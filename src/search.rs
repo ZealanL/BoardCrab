@@ -122,16 +122,11 @@ impl SearchInfo {
     }
 }
 
-pub struct SearchResult {
-    pub eval: Value,
-    pub best_move_idx: Option<usize> // May not exist if at depth 0
-}
-
 fn _search(
     board: &Board, table: &std::sync::RwLock<transpos::Table>, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: u8,
-    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> SearchResult {
+    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> Value {
 
     search_info.total_nodes += 1;
 
@@ -139,10 +134,7 @@ fn _search(
     for i in (4..10).step_by(2) {
         if (depth_elapsed >= i) && search_info.depth_hashes[(depth_elapsed - i) as usize] == board.hash {
             // Loop detected
-            return SearchResult {
-                eval: 0.0,
-                best_move_idx: None
-            };
+            return 0.0;
         } else {
             break;
         }
@@ -162,10 +154,7 @@ fn _search(
         }
 
         if stop {
-            return SearchResult {
-                eval: VALUE_INF,
-                best_move_idx: None
-            };
+            return VALUE_INF;
         }
     }
 
@@ -175,32 +164,26 @@ fn _search(
         table_entry = table_r.get(board.hash);
     }
 
+    // Table lookup
     let mut table_best_move: Option<u8> = None;
     if table_entry.is_valid() {
         if table_entry.depth_remaining >= depth_remaining {
-            let get_table_result = || -> SearchResult {
-                SearchResult {
-                    eval: table_entry.eval,
-                    best_move_idx: Some(table_entry.best_move_idx as usize)
-                }
-            };
-
             match table_entry.entry_type {
                 transpos::EntryType::FailLow => {
                     // Exceeds our lower bound, do a cutoff
                     if table_entry.eval <= lower_bound {
-                        return get_table_result();
+                        return table_entry.eval;
                     }
                 },
                 transpos::EntryType::FailHigh => {
                     if table_entry.eval >= upper_bound {
                         // Exceeds our upper bound, do a cutoff
-                        return get_table_result();
+                        return table_entry.eval;
                     }
                 },
                 transpos::EntryType::Exact => {
                     // Exact node, no further searching is needed
-                    return get_table_result();
+                    return table_entry.eval;
                 },
                 _ => {
                     panic!("Invalid or unsupported entry type: {}", table_entry.entry_type as usize);
@@ -218,10 +201,7 @@ fn _search(
         let mut moves = MoveBuffer::new();
         move_gen::generate_moves(&board, &mut moves);
         if moves.is_empty() {
-            return SearchResult {
-                eval: get_no_moves_eval(board),
-                best_move_idx: None
-            }
+            return get_no_moves_eval(board);
         }
 
         #[derive(Copy, Clone)]
@@ -296,22 +276,18 @@ fn _search(
                 depth_reduction = 1;
             }
 
-            let next_result = _search(
+            let mut next_eval = _search(
                     &next_board, &table, search_info,
                     -upper_bound, -lower_bound,
                     depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
                     stop_flag, stop_time
             );
 
-            if next_result.eval == VALUE_INF {
-                // Search aborted
-                return SearchResult {
-                    eval: VALUE_INF,
-                    best_move_idx: None
-                }
+            if next_eval.is_infinite() {
+                return VALUE_INF;
             }
 
-            let next_eval = decay_eval(-next_result.eval);
+            let next_eval = decay_eval(-next_eval);
             if next_eval > best_eval {
                 best_eval = next_eval;
                 best_move_idx = move_idx;
@@ -351,23 +327,17 @@ fn _search(
             );
         }
 
-        SearchResult {
-            eval: best_eval,
-            best_move_idx: Some(best_move_idx)
-        }
+        best_eval
 
     } else {
-        SearchResult {
-            eval: extension_search(board, search_info, lower_bound, upper_bound, MAX_EXTENSION_DEPTH),
-            best_move_idx: None
-        }
+        extension_search(board, search_info, lower_bound, upper_bound, MAX_EXTENSION_DEPTH)
     }
 }
 
 pub fn search(
     board: &Board, table: &std::sync::RwLock<transpos::Table>, depth: u8,
     guessed_eval: Option<Value>,
-    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (SearchResult, SearchInfo) {
+    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (Value, SearchInfo) {
 
     let mut search_info = SearchInfo::new();
 
@@ -390,17 +360,17 @@ pub fn search(
         }
 
         loop {
-            let search_result = _search(
+            let eval = _search(
                 board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
             );
 
-            if search_result.eval > window_max {
-                window_max = search_result.eval + WINDOW_PAD;
-            } else if search_result.eval < window_min {
-                window_min = search_result.eval - WINDOW_PAD;
+            if eval > window_max {
+                window_max = eval + WINDOW_PAD;
+            } else if eval < window_min {
+                window_min = eval - WINDOW_PAD;
             } else {
                 // Window was sufficient
-                return (search_result, search_info);
+                return (eval, search_info);
             }
         }
     } else {

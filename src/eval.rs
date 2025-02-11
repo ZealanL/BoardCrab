@@ -3,7 +3,7 @@ use crate::board::*;
 use crate::lookup_gen;
 
 pub type Value = f32; // Note: MUST be a float type
-pub const VALUE_INF: Value = Value::MAX;
+pub const VALUE_INF: Value = Value::INFINITY;
 pub const VALUE_CHECKMATE: Value = 1_000.0;
 pub const VALUE_CHECKMATE_MIN: Value = 500.0;
 

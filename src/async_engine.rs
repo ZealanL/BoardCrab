@@ -14,7 +14,7 @@ pub struct AsyncEngine {
     board: Board,
     arc_table: Arc<RwLock<transpos::Table>>,
     stop_flag: ThreadFlag,
-    thread_join_handles: Vec<thread::JoinHandle<Option<usize>>>, // Outputs best move idx
+    thread_join_handles: Vec<thread::JoinHandle<Option<u8>>>, // Outputs best move idx
     active_thread_count: Arc<RwLock<usize>>
 }
 
@@ -64,25 +64,27 @@ impl AsyncEngine {
 
                     let is_leader_thread = thread_idx == 0;
 
-                    let mut latest_best_move_idx: Option<usize> = None;
+                    let mut latest_best_move_idx: Option<u8> = None;
                     let mut guessed_next_eval: Option<Value> = None;
                     for depth_minus_one in 0..max_depth {
                         let depth = depth_minus_one + 1;
 
                         {
-                            let (search_result, search_info) = search::search(
+                            let (search_eval, search_info) = search::search(
                                 &board, &arc_table, depth,
                                 guessed_next_eval,
                                 Some(&stop_flag), stop_time
                             );
 
-                            guessed_next_eval = Some(search_result.eval);
+                            guessed_next_eval = Some(search_eval);
 
-                            if search_result.best_move_idx.is_some() && is_leader_thread {
+                            let root_entry = arc_table.read().unwrap().get(board.hash);
+
+                            if root_entry.is_valid() && is_leader_thread && !search_eval.is_infinite() {
                                 // TODO: Somewhat lame to be calling UCI stuff from async_engine
                                 let elapsed_time = std::time::Instant::now() - start_time;
-                                uci::print_search_results(&board, &arc_table.read().unwrap(), depth, search_result.eval, &search_info, elapsed_time.as_secs_f64());
-                                latest_best_move_idx = search_result.best_move_idx;
+                                uci::print_search_results(&board, &arc_table.read().unwrap(), depth, search_eval, &search_info, elapsed_time.as_secs_f64());
+                                latest_best_move_idx = Some(root_entry.best_move_idx);
                             }
                         }
                     }
@@ -93,7 +95,7 @@ impl AsyncEngine {
                             move_gen::generate_moves(&board, &mut moves);
                             // TODO: Lame UCI code here, should be in uci::*
                             //  Ideally we should have a callback or something? Not sure
-                            println!("bestmove {}", moves[latest_best_move_idx.unwrap()]);
+                            println!("bestmove {}", moves[latest_best_move_idx.unwrap() as usize]);
                         } else {
                             panic!("No best move found in time")
                         }
@@ -105,9 +107,9 @@ impl AsyncEngine {
     }
 
     // Returns the best move index
-    pub fn stop_search(&mut self) -> Option<usize> {
+    pub fn stop_search(&mut self) -> Option<u8> {
         self.stop_flag.trigger();
-        let mut result: Option<usize> = None;
+        let mut result: Option<u8> = None;
         for handle in self.thread_join_handles.drain(..) {
             result = handle.join().unwrap();
         }
