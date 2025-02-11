@@ -128,7 +128,7 @@ pub struct SearchResult {
 }
 
 fn _search(
-    board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
+    board: &Board, table: &std::sync::RwLock<transpos::Table>, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: u8,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> SearchResult {
@@ -169,7 +169,11 @@ fn _search(
         }
     }
 
-    let table_entry = table.get(board.hash);
+    let table_entry;
+    {
+        let table_r = table.read().unwrap();
+        table_entry = table_r.get(board.hash);
+    }
 
     let mut table_best_move: Option<u8> = None;
     if table_entry.is_valid() {
@@ -293,7 +297,7 @@ fn _search(
             }
 
             let next_result = _search(
-                    &next_board, table, search_info,
+                    &next_board, &table, search_info,
                     -upper_bound, -lower_bound,
                     depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
                     stop_flag, stop_time
@@ -325,24 +329,27 @@ fn _search(
             }
         }
 
-        table.set(
-            transpos::Entry {
-                hash: board.hash,
-                eval: best_eval,
-                best_move_idx: best_move_idx as u8,
-                depth_remaining,
-                entry_type: {
-                    if best_eval >= upper_bound {
-                        transpos::EntryType::FailHigh
-                    } else if best_eval <= lower_bound {
-                        transpos::EntryType::FailLow
-                    } else {
-                        transpos::EntryType::Exact
-                    }
-                },
-                age_count: 0 // Will be set by the transposition table
-            }
-        );
+        {
+            let mut table_w = table.write().unwrap();
+            (*table_w).set(
+                transpos::Entry {
+                    hash: board.hash,
+                    eval: best_eval,
+                    best_move_idx: best_move_idx as u8,
+                    depth_remaining,
+                    entry_type: {
+                        if best_eval >= upper_bound {
+                            transpos::EntryType::FailHigh
+                        } else if best_eval <= lower_bound {
+                            transpos::EntryType::FailLow
+                        } else {
+                            transpos::EntryType::Exact
+                        }
+                    },
+                    age_count: 0 // Will be set by the transposition table
+                }
+            );
+        }
 
         SearchResult {
             eval: best_eval,
@@ -358,7 +365,7 @@ fn _search(
 }
 
 pub fn search(
-    board: &Board, table: &mut transpos::Table, depth: u8,
+    board: &Board, table: &std::sync::RwLock<transpos::Table>, depth: u8,
     guessed_eval: Option<Value>,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (SearchResult, SearchInfo) {
 

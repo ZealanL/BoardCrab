@@ -1,11 +1,10 @@
 use std::thread;
 use std::sync::Arc;
-use std::sync::Mutex;
+use std::sync::RwLock;
 use crate::board::*;
 use crate::move_gen;
 use crate::search;
 use crate::eval::*;
-use crate::move_gen::MoveBuffer;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 use crate::uci;
@@ -13,18 +12,20 @@ use crate::time_manager;
 
 pub struct AsyncEngine {
     board: Board,
-    arc_table: Arc<Mutex<transpos::Table>>,
+    arc_table: Arc<RwLock<transpos::Table>>,
     stop_flag: ThreadFlag,
-    thread_join_handle: Option<thread::JoinHandle<Option<usize>>>, // Outputs best move idx
+    thread_join_handles: Vec<thread::JoinHandle<Option<usize>>>, // Outputs best move idx
+    active_thread_count: Arc<RwLock<usize>>
 }
 
 impl AsyncEngine {
     pub fn new(table_size_mbs: usize) -> AsyncEngine {
         AsyncEngine {
             board: Board::start_pos(),
-            arc_table: Arc::new(Mutex::new(transpos::Table::new(table_size_mbs))),
+            arc_table: Arc::new(RwLock::new(transpos::Table::new(table_size_mbs))),
             stop_flag: ThreadFlag::new(),
-            thread_join_handle: None
+            thread_join_handles: Vec::new(),
+            active_thread_count: Arc::new(RwLock::new(0))
         }
     }
 
@@ -51,64 +52,64 @@ impl AsyncEngine {
             }
         }
 
-        let board = self.board.clone();
-        let stop_flag = self.stop_flag.clone();
-        let arc_table = self.arc_table.clone();
+        let num_threads = 4; // TODO: Make configurable
 
-        self.thread_join_handle = Some(
-            thread::spawn(move || {
-                let mut latest_best_move_idx = None;
-                let mut guessed_next_eval: Option<Value> = None;
+        for thread_idx in 0..num_threads {
+            let board = self.board.clone();
+            let stop_flag = self.stop_flag.clone();
+            let arc_table = self.arc_table.clone();
 
-                for depth_minus_one in 0..max_depth {
-                    let depth = depth_minus_one + 1;
-                    let mut table = arc_table.lock().unwrap();
-                    let (search_result, search_info) = search::search(
-                        &board, &mut table, depth,
-                        guessed_next_eval,
-                        Some(&stop_flag), stop_time
-                    );
+            self.thread_join_handles.push(
+                thread::spawn(move || {
 
-                    guessed_next_eval = Some(search_result.eval);
+                    let is_leader_thread = thread_idx == 0;
 
-                    if search_result.best_move_idx.is_some() {
-                        // TODO: Somewhat lame to be calling UCI stuff from async_engine
-                        let elapsed_time = std::time::Instant::now() - start_time;
-                        uci::print_search_results(&board, &table, depth, search_result.eval, &search_info, elapsed_time.as_secs_f64());
+                    let mut latest_best_move_idx: Option<usize> = None;
+                    let mut guessed_next_eval: Option<Value> = None;
+                    for depth_minus_one in 0..max_depth {
+                        let depth = depth_minus_one + 1;
 
-                        latest_best_move_idx = search_result.best_move_idx;
-                    }
+                        {
+                            let (search_result, search_info) = search::search(
+                                &board, &arc_table, depth,
+                                guessed_next_eval,
+                                Some(&stop_flag), stop_time
+                            );
 
-                    if latest_best_move_idx.is_some() {
-                        // If we've found a best move and are out of time, break
-                        if stop_time.is_some() && std::time::Instant::now() >= stop_time.unwrap() {
-                            break;
+                            guessed_next_eval = Some(search_result.eval);
+
+                            if search_result.best_move_idx.is_some() && is_leader_thread {
+                                // TODO: Somewhat lame to be calling UCI stuff from async_engine
+                                let elapsed_time = std::time::Instant::now() - start_time;
+                                uci::print_search_results(&board, &arc_table.read().unwrap(), depth, search_result.eval, &search_info, elapsed_time.as_secs_f64());
+                                latest_best_move_idx = search_result.best_move_idx;
+                            }
                         }
                     }
-                }
 
-                if latest_best_move_idx.is_some() {
-                    let mut moves = MoveBuffer::new();
-                    move_gen::generate_moves(&board, &mut moves);
-                    // TODO: Lame UCI code here, should be in uci::*
-                    //  Ideally we should have a callback or something? Not sure
-                    println!("bestmove {}", moves[latest_best_move_idx.unwrap()]);
-                } else {
-                    panic!("No best move found in time")
-                }
-                latest_best_move_idx
-            })
-        );
+                    if is_leader_thread {
+                        if latest_best_move_idx.is_some() {
+                            let mut moves = move_gen::MoveBuffer::new();
+                            move_gen::generate_moves(&board, &mut moves);
+                            // TODO: Lame UCI code here, should be in uci::*
+                            //  Ideally we should have a callback or something? Not sure
+                            println!("bestmove {}", moves[latest_best_move_idx.unwrap()]);
+                        } else {
+                            panic!("No best move found in time")
+                        }
+                    }
+                    latest_best_move_idx
+                })
+            );
+        }
     }
 
     // Returns the best move index
     pub fn stop_search(&mut self) -> Option<usize> {
         self.stop_flag.trigger();
-        let result: Option<usize>;
-        if let Some(handle) = self.thread_join_handle.take() {
-            result = handle.join().unwrap()
-        } else {
-            result = None
+        let mut result: Option<usize> = None;
+        for handle in self.thread_join_handles.drain(..) {
+            result = handle.join().unwrap();
         }
         self.stop_flag.reset();
         result
