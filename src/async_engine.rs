@@ -15,7 +15,6 @@ pub struct AsyncEngine {
     arc_table: Arc<RwLock<transpos::Table>>,
     stop_flag: ThreadFlag,
     thread_join_handles: Vec<thread::JoinHandle<Option<u8>>>, // Outputs best move idx
-    active_thread_count: Arc<RwLock<usize>>
 }
 
 impl AsyncEngine {
@@ -24,8 +23,7 @@ impl AsyncEngine {
             board: Board::start_pos(),
             arc_table: Arc::new(RwLock::new(transpos::Table::new(table_size_mbs))),
             stop_flag: ThreadFlag::new(),
-            thread_join_handles: Vec::new(),
-            active_thread_count: Arc::new(RwLock::new(0))
+            thread_join_handles: Vec::new()
         }
     }
 
