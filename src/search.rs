@@ -5,6 +5,7 @@ use crate::eval::*;
 use crate::move_gen;
 use crate::zobrist::Hash;
 use crate::move_gen::MoveBuffer;
+use crate::raw_ptr::RawPtr;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 
@@ -123,7 +124,7 @@ impl SearchInfo {
 }
 
 fn _search(
-    board: &Board, table: &std::sync::RwLock<transpos::Table>, search_info: &mut SearchInfo,
+    board: &Board, table: &RawPtr<transpos::Table>, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: u8,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> Value {
@@ -158,11 +159,7 @@ fn _search(
         }
     }
 
-    let table_entry;
-    {
-        let table_r = table.read().unwrap();
-        table_entry = table_r.get(board.hash);
-    }
+    let table_entry = table.get().get(board.hash);
 
     // Table lookup
     let mut table_best_move: Option<u8> = None;
@@ -211,7 +208,7 @@ fn _search(
 
             let depth_reduction = depth_remaining / 3;
             let next_result = _search(
-                &next_board, &table, search_info,
+                &next_board, table, search_info,
                 -upper_bound, -lower_bound,
                 depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
                 stop_flag, stop_time
@@ -305,7 +302,7 @@ fn _search(
             }
 
             let mut next_eval = _search(
-                    &next_board, &table, search_info,
+                    &next_board, table, search_info,
                     -upper_bound, -lower_bound,
                     depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
                     stop_flag, stop_time
@@ -334,8 +331,7 @@ fn _search(
         }
 
         {
-            let mut table_w = table.write().unwrap();
-            (*table_w).set(
+            table.get().set(
                 transpos::Entry {
                     hash: board.hash,
                     eval: best_eval,
@@ -363,7 +359,7 @@ fn _search(
 }
 
 pub fn search(
-    board: &Board, table: &std::sync::RwLock<transpos::Table>, depth: u8,
+    board: &Board, table: &RawPtr<transpos::Table>, depth: u8,
     guessed_eval: Option<Value>,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (Value, SearchInfo) {
 
@@ -389,7 +385,7 @@ pub fn search(
 
         loop {
             let eval = _search(
-                board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+                board, &table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
             );
 
             if eval > window_max {
@@ -404,7 +400,7 @@ pub fn search(
     } else {
         // Very low-depth, aspiration window isn't as helpful
         let search_result = _search(
-            board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+            board, &table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
         );
 
         (search_result, search_info)
