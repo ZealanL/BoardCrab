@@ -131,7 +131,7 @@ fn _search(
     search_info.total_nodes += 1;
 
     // Check draw by repetition
-    for i in (4..10).step_by(2) {
+    for i in (4..12).step_by(2) {
         if (depth_elapsed >= i) && search_info.depth_hashes[(depth_elapsed - i) as usize] == board.hash {
             // Loop detected
             return 0.0;
