@@ -154,6 +154,27 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
     true
 }
 
+pub fn cmd_ratemoves(engine: &mut AsyncEngine) -> bool {
+    let mut moves_buf = move_gen::MoveBuffer::new();
+    move_gen::generate_moves(engine.get_board(), &mut moves_buf);
+
+    let mut moves = Vec::new();
+    for mv in moves_buf.iter() {
+        moves.push(mv);
+    }
+    moves.sort_by(|a, b| {
+        eval_move(engine.get_board(), b).total_cmp(&eval_move(engine.get_board(), a))
+    });
+
+    println!("Moves:");
+    for i in 0..moves.len() {
+        let mv = moves[i];
+        println!("\t{}: {}", mv, eval_move(engine.get_board(), &mv));
+    }
+
+    true
+}
+
 // Returns true if the command was understood and processed correctly
 pub fn process_cmd(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
     if parts.is_empty() {
@@ -181,6 +202,7 @@ pub fn process_cmd(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
             print_eval(engine.get_board());
             true
         },
+        "ratemoves" => cmd_ratemoves(engine),
         "stop" => {
             engine.stop_search();
             true
