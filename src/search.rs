@@ -298,7 +298,7 @@ fn _search(
 
             // Late move reduction
             let mut depth_reduction: u8 = 0;
-            if i >= 6 && depth_remaining == 2
+            if i >= 4 && depth_remaining <= 4 && depth_remaining >= 2
                 && best_eval < lower_bound
                 && (mv.is_quiet() || move_eval < 0.0) {
                 depth_reduction = 1;
