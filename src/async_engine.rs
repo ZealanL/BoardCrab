@@ -15,7 +15,7 @@ pub struct AsyncEngine {
     board: Board,
     table: transpos::Table,
     stop_flag: ThreadFlag,
-    thread_join_handles: Vec<thread::JoinHandle<Option<u8>>>, // Outputs best move idx
+    thread_join_handles: Vec<thread::JoinHandle<Option<u8>>> // Outputs best move idx
 }
 
 impl AsyncEngine {
@@ -28,26 +28,18 @@ impl AsyncEngine {
         }
     }
 
-    pub fn start_search(&mut self, max_depth: u8, max_time: Option<f64>, remaining_time: Option<f64>) {
+    pub fn start_search(&mut self, max_depth: u8, time_state: Option<time_manager::TimeState>) {
+
         self.stop_search();
 
         let start_time = std::time::Instant::now();
-        let mut stop_time: Option<std::time::Instant>;
-        if max_time.is_some() {
-            stop_time = Some(start_time + std::time::Duration::from_secs_f64(max_time.unwrap()));
-        } else {
-            stop_time = None;
-        }
 
-        if remaining_time.is_some() {
-            let allotted_time = time_manager::get_time_to_use(&self.board, remaining_time.unwrap());
-            let desired_stop_time = start_time + std::time::Duration::from_secs_f64(allotted_time);
-
-            if stop_time.is_some() {
-                // We already have a stop time, take the minimum of the two
-                stop_time = Some(stop_time.unwrap().min(desired_stop_time));
-            } else {
-                stop_time = Some(desired_stop_time);
+        let mut max_time_to_use: Option<f64> = None;
+        let mut stop_time: Option<std::time::Instant> = None;
+        if time_state.is_some() {
+            max_time_to_use = time_manager::get_max_time_to_use(self.get_board(), time_state.unwrap());
+            if max_time_to_use.is_some() {
+                stop_time = Some(start_time + std::time::Duration::from_secs_f64(max_time_to_use.unwrap()));
             }
         }
 
@@ -61,9 +53,9 @@ impl AsyncEngine {
             self.thread_join_handles.push(
                 thread::spawn(move || {
 
-                    let is_leader_thread = thread_idx == 0 || true;
+                    let is_leader_thread = thread_idx == 0;
 
-                    let mut latest_best_move_idx: Option<u8> = None;
+                    let mut best_moves = Vec::new();
                     let mut guessed_next_eval: Option<Value> = None;
                     for depth_minus_one in 0..max_depth {
                         let depth = depth_minus_one + 1;
@@ -75,31 +67,51 @@ impl AsyncEngine {
                                 Some(&stop_flag), stop_time
                             );
 
+                            if search_eval.is_infinite() {
+                                // Search aborted
+                                break;
+                            }
+
                             guessed_next_eval = Some(search_eval);
 
-                            let root_entry = table_ptr.get().get(board.hash);
+                            let root_entry = table_ptr.get().get_wait(board.hash);
 
-                            if root_entry.is_valid() && is_leader_thread && !search_eval.is_infinite() {
-                                // TODO: Somewhat lame to be calling UCI stuff from async_engine
-                                let elapsed_time = std::time::Instant::now() - start_time;
-                                uci::print_search_results(&board, table_ptr.get(), depth, search_eval, &search_info, elapsed_time.as_secs_f64());
-                                latest_best_move_idx = Some(root_entry.best_move_idx);
+                            if root_entry.is_valid() {
+                                best_moves.push(root_entry.best_move_idx);
+
+                                if is_leader_thread && !search_eval.is_infinite() {
+                                    // TODO: Somewhat lame to be calling UCI stuff from async_engine
+                                    let elapsed_time = std::time::Instant::now() - start_time;
+                                    uci::print_search_results(&board, table_ptr.get(), depth, search_eval, &search_info, elapsed_time.as_secs_f64());
+                                }
+
+                                if stop_time.is_some() {
+                                    let remaining_time = stop_time.unwrap() - std::time::Instant::now();
+                                    if time_manager::should_exit_early(max_time_to_use.unwrap(), remaining_time.as_secs_f64(), &best_moves) {
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
 
                     if is_leader_thread {
-                        if latest_best_move_idx.is_some() {
+                        if best_moves.len() > 0 {
                             let mut moves = move_gen::MoveBuffer::new();
                             move_gen::generate_moves(&board, &mut moves);
                             // TODO: Lame UCI code here, should be in uci::*
                             //  Ideally we should have a callback or something? Not sure
-                            println!("bestmove {}", moves[latest_best_move_idx.unwrap() as usize]);
+                            println!("bestmove {}", moves[*best_moves.last().unwrap() as usize]);
                         } else {
                             panic!("No best move found in time")
                         }
                     }
-                    latest_best_move_idx
+
+                    if best_moves.len() > 0 {
+                        Some(*best_moves.last().unwrap())
+                    } else {
+                        None
+                    }
                 })
             );
         }
@@ -108,12 +120,18 @@ impl AsyncEngine {
     // Returns the best move index
     pub fn stop_search(&mut self) -> Option<u8> {
         self.stop_flag.trigger();
-        let mut result: Option<u8> = None;
+        let mut best_move_idx: Option<u8> = None;
         for handle in self.thread_join_handles.drain(..) {
-            result = handle.join().unwrap();
+            let handle_result = handle.join();
+            if handle_result.is_ok() {
+                best_move_idx = handle_result.unwrap();
+            } else {
+                panic!("Search thread crashed");
+            }
+
         }
         self.stop_flag.reset();
-        result
+        best_move_idx
     }
 
     pub fn get_board(&self) -> &Board {

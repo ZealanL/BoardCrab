@@ -1,3 +1,4 @@
+use std::io::Write;
 use crate::board::*;
 use crate::move_gen;
 use crate::search;
@@ -6,7 +7,7 @@ use crate::fen;
 use crate::search::SearchInfo;
 use crate::transpos;
 use crate::async_engine::AsyncEngine;
-
+use crate::time_manager::TimeState;
 // Refs:
 // - https://gist.github.com/DOBRO/2592c6dad754ba67e6dcaec8c90165bf
 // - https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/UCI/UCI.cpp
@@ -104,6 +105,8 @@ pub fn cmd_position(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
 }
 
 pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
+    let board = engine.get_board();
+
     let mut pairs = Vec::new();
     let mut singles = Vec::new();
     let mut i: usize = 1;
@@ -123,34 +126,36 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
     }
 
     let mut max_depth: u8 = u8::MAX;
-    let mut max_time: Option<f64> = None;
-    let mut remaining_times: [Option<f64>; 2] = [None; 2];
+    let mut time_state: TimeState = TimeState::new();
+
+    let remaining_time_str = if board.turn_idx == 0 { "wtime" } else { "btime" };
+    let time_inc_str = if board.turn_idx == 0 { "winc" } else { "binc" };
 
     for pair in pairs {
-        match pair.0.as_str() {
+        let first_arg = pair.0.as_str();
+        match first_arg {
             "depth" => {
                 max_depth = pair.1 as u8;
             },
             "movetime" => {
-                max_time = Some(pair.1 as f64 / 1000.0);
+                time_state.max_time = Some(pair.1 as f64 / 1000.0);
             }
-            "wtime" => {
-                remaining_times[0] = Some(pair.1 as f64 / 1000.0);
-            }
-            "btime" => {
-                remaining_times[1] = Some(pair.1 as f64 / 1000.0);
+            "movestogo" => {
+                time_state.moves_till_time_control = Some(pair.1 as u64);
             }
             _ => {
+                if first_arg == remaining_time_str {
+                    time_state.remaining_time = Some(pair.1 as f64 / 1000.0);
+                } else if first_arg == time_inc_str {
+                    time_state.time_inc = Some(pair.1 as f64 / 1000.0);
+                }
 
             }
         }
-        if pair.0 == "depth" {
-            max_depth = pair.1 as u8;
-        }
-    }
-    let remaining_time = remaining_times[engine.get_board().turn_idx];
-    engine.start_search(max_depth, max_time, remaining_time);
 
+    }
+
+    engine.start_search(max_depth, Some(time_state));
     true
 }
 

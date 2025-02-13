@@ -159,7 +159,7 @@ fn _search(
         }
     }
 
-    let table_entry = table.get().get(board.hash);
+    let table_entry = table.get().get_fast(board.hash);
 
     // Table lookup
     let mut table_best_move: Option<u8> = None;
@@ -261,7 +261,11 @@ fn _search(
         }
 
         if table_best_move.is_some() {
-            rated_moves[table_best_move.unwrap() as usize].eval = VALUE_INF;
+            let table_best_move_idx = table_best_move.unwrap() as usize;
+            if table_best_move_idx >= rated_moves.len() {
+                panic!("OOB table best move index");
+            }
+            rated_moves[table_best_move_idx].eval = VALUE_INF;
         }
 
         // Insertion sort
@@ -330,26 +334,18 @@ fn _search(
             }
         }
 
-        {
-            table.get().set(
-                transpos::Entry {
-                    hash: board.hash,
-                    eval: best_eval,
-                    best_move_idx: best_move_idx as u8,
-                    depth_remaining,
-                    entry_type: {
-                        if best_eval >= upper_bound {
-                            transpos::EntryType::FailHigh
-                        } else if best_eval <= lower_bound {
-                            transpos::EntryType::FailLow
-                        } else {
-                            transpos::EntryType::Exact
-                        }
-                    },
-                    age_count: 0 // Will be set by the transposition table
+        table.get().set(
+            board.hash, best_eval, best_move_idx as u8, depth_remaining,
+            {
+                if best_eval >= upper_bound {
+                    transpos::EntryType::FailHigh
+                } else if best_eval <= lower_bound {
+                    transpos::EntryType::FailLow
+                } else {
+                    transpos::EntryType::Exact
                 }
-            );
-        }
+            }
+        );
 
         best_eval
 
@@ -413,7 +409,7 @@ pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
 
     loop {
 
-        let entry = table.get(board.hash);
+        let entry = table.get_wait(board.hash);
         if entry.hash == board.hash {
             if found_hashes.contains(&board.hash) {
                 // Looped position

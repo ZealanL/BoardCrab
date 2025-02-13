@@ -16,7 +16,8 @@ pub struct Entry {
     pub best_move_idx: u8,
     pub depth_remaining: u8,
     pub entry_type: EntryType,
-    pub age_count: u64
+    pub age_count: u64,
+    pub checksum: u64
 }
 
 impl Entry {
@@ -27,12 +28,41 @@ impl Entry {
             best_move_idx: 0,
             depth_remaining: 0,
             entry_type: EntryType::Invalid,
-            age_count: 0
+            age_count: 0,
+            checksum: 0
         }
     }
 
-    pub fn is_valid(&self) -> bool {
+    pub fn update_checksum(&mut self) {
+        self.checksum = self.calc_checksum();
+    }
+
+    fn calc_checksum(&self) -> u64 {
+        let mut cur_checksum = 0;
+
+        cur_checksum += self.hash;
+        unsafe {
+            cur_checksum += (std::mem::transmute::<Value, i32>(self.eval) as u64) ^ cur_checksum;
+        }
+        cur_checksum += self.best_move_idx as u64 ^ cur_checksum;
+        cur_checksum += self.depth_remaining as u64 ^ cur_checksum;
+        cur_checksum += self.entry_type as u64 ^ cur_checksum;
+
+        // NOTE: We don't care about the age count, it's not that important
+
+        cur_checksum
+    }
+
+    pub fn is_set(&self) -> bool {
         self.entry_type != EntryType::Invalid
+    }
+
+    pub fn is_valid(&self) -> bool {
+        if self.entry_type == EntryType::Invalid {
+            return false;
+        }
+
+        self.checksum == self.calc_checksum()
     }
 }
 
@@ -75,7 +105,8 @@ impl Table {
         (hash as usize) % self.buckets.len()
     }
 
-    pub fn get(&self, hash: Hash) ->  Entry {
+    // If the entry is locked, just returns an empty entry
+    pub fn get_fast(&self, hash: Hash) -> Entry {
         let bucket = &self.buckets[self.get_bucket_idx(hash)];
         for i in 0..ENTRIES_PER_BUCKET {
             if bucket.entries[i].hash == hash {
@@ -86,16 +117,40 @@ impl Table {
         Entry::new()
     }
 
-    pub fn set(&mut self, mut entry: Entry) {
-        let bucket_idx = self.get_bucket_idx(entry.hash);
+    // Waits for the entry to be unlocked
+    pub fn get_wait(&self, hash: Hash) -> Entry {
+        let bucket = &self.buckets[self.get_bucket_idx(hash)];
+        loop {
+            let mut was_locked = false;
+            for i in 0..ENTRIES_PER_BUCKET {
+                if bucket.entries[i].hash == hash {
+                    let result = bucket.entries[i];
+                    if result.is_set() && !result.is_valid() {
+                        was_locked = true;
+                        break;
+                    }
+                    return result;
+                }
+            }
+
+            if was_locked {
+                continue;
+            } else {
+                return Entry::new();
+            }
+        }
+    }
+
+    pub fn set(&mut self, hash: Hash, eval: Value, best_move_idx: u8, depth_remaining: u8, entry_type: EntryType) {
+        let bucket_idx = self.get_bucket_idx(hash);
         let bucket = &mut self.buckets[bucket_idx];
 
         // Find the oldest entry to replace
         let mut replace_entry_idx = 0;
         let mut oldest_entry_age = u64::max_value();
         for i in 0..ENTRIES_PER_BUCKET {
-            let existing_entry = &bucket.entries[i];
-            if existing_entry.hash == entry.hash {
+            let existing_entry = bucket.entries[i];
+            if existing_entry.hash == hash {
                 // We found a matching hash, just use that
                 replace_entry_idx = i;
                 break;
@@ -108,7 +163,17 @@ impl Table {
         }
 
         self.age_count += 1;
-        entry.age_count = self.age_count;
+
+        let mut entry = Entry {
+            hash,
+            eval,
+            best_move_idx,
+            depth_remaining,
+            entry_type,
+            age_count: self.age_count,
+            checksum: 0
+        };
+        entry.update_checksum();
 
         bucket.entries[replace_entry_idx] = entry;
     }
