@@ -55,6 +55,7 @@ impl AsyncEngine {
 
                     let is_leader_thread = thread_idx == 0;
 
+                    let mut node_counts = Vec::new();
                     let mut best_moves = Vec::new();
                     let mut guessed_next_eval: Option<Value> = None;
                     for depth_minus_one in 0..max_depth {
@@ -71,6 +72,8 @@ impl AsyncEngine {
                                 // Search aborted
                                 break;
                             }
+
+                            node_counts.push(search_info.total_nodes);
 
                             guessed_next_eval = Some(search_eval);
 
@@ -99,9 +102,7 @@ impl AsyncEngine {
                         if best_moves.len() > 0 {
                             let mut moves = move_gen::MoveBuffer::new();
                             move_gen::generate_moves(&board, &mut moves);
-                            // TODO: Lame UCI code here, should be in uci::*
-                            //  Ideally we should have a callback or something? Not sure
-                            println!("bestmove {}", moves[*best_moves.last().unwrap() as usize]);
+                            uci::print_best_move(moves[*best_moves.last().unwrap() as usize]);
                         } else {
                             panic!("No best move found in time")
                         }

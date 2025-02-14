@@ -1,4 +1,3 @@
-use std::io::Write;
 use crate::board::*;
 use crate::move_gen;
 use crate::search;
@@ -41,6 +40,10 @@ pub fn print_search_results(board: &Board, table: &transpos::Table, depth: u8, e
     println!(
         "info depth {depth} multipv {multipv} score {eval_str} nodes {total_nodes} nps {nodes_per_sec} time {elapsed_ms} pv {pv_str}"
     );
+}
+
+pub fn print_best_move(best_move: Move) {
+    println!("bestmove {}", best_move);
 }
 
 pub fn cmd_position(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
