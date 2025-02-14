@@ -148,7 +148,6 @@ fn _search(
         if stop_flag.is_some() && stop_flag.unwrap().get() {
             stop = true;
         } else if stop_time.is_some() {
-            // TODO: Is this slow?
             if std::time::Instant::now() >= stop_time.unwrap() {
                 stop = true
             }

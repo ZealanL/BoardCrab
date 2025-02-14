@@ -32,7 +32,6 @@ const PIECE_BASE_VALUES: [Value; NUM_PIECES] = [1.0, 3.2, 3.5, 5.2, 10.0, 1.0];
 // Returns the "attacking power" of a team from 0-1
 // This is meant to represent how capable the player is of making a deadly attack on the king
 fn calc_attacking_power(board: &Board, team_idx: usize) -> Value {
-    // TODO: Only need to count to 2, >2 rooks and >1 queen is not very helpful to evaluate
     // TODO: Consider minor pieces
     let rook_count = board.pieces[team_idx][PIECE_ROOK].count_ones();
     if board.pieces[team_idx][PIECE_QUEEN] != 0 {
@@ -117,7 +116,6 @@ fn eval_piece_type(board: &Board, team_idx: usize, piece_idx: usize, piece_mask:
                     }
                 }
 
-                // TODO: Only needs to be able to count to 3
                 // TODO: Scale with distance between the pawns
                 let pawns_in_file = (piece_mask & column).count_ones();
                 let stacked_penalty = (((pawns_in_file - 1) as Value) / 2.0) * -0.3;
@@ -200,7 +198,6 @@ fn eval_piece_type(board: &Board, team_idx: usize, piece_idx: usize, piece_mask:
             for x in 0..8 {
                 let file = bm_make_column(x);
 
-                // TODO: Only need to count to 2
                 let pawns_in_file = (all_pawns & file).count_ones();
                 let rooks_in_file = (piece_mask & file).count_ones();
 
@@ -325,8 +322,6 @@ fn eval_team(board: &Board, team_idx: usize) -> Value {
 
 // Returns true if the player can possibly checkmate the other
 fn is_checkmate_possible(board: &Board, team_idx: usize) -> bool {
-    // TODO: count_ones() is not needed here
-
     if board.pieces[team_idx][PIECE_PAWN] != 0 {
         return true;
     }
@@ -358,7 +353,6 @@ pub fn eval_board(board: &Board) -> Value {
 
         let mut checkmate_possible: bool = false;
         for team_idx in 0..2 {
-            // TODO: count_ones() is not needed here
             if is_checkmate_possible(board, team_idx) {
                 checkmate_possible = true;
                 break;
