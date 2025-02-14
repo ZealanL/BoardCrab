@@ -222,8 +222,8 @@ pub fn get_slider_tos_fast(piece_idx: usize, piece_pos_idx: usize, occupy: BitMa
     }
 }
 
-pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize, _occupy: BitMask) -> BitMask {
-    let occupy = _occupy & !piece_pos;
+pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize, occupy: BitMask) -> BitMask {
+    let occupy = occupy & !piece_pos;
 
     match piece_idx {
         PIECE_BISHOP | PIECE_ROOK | PIECE_QUEEN => {

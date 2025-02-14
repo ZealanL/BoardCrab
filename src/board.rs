@@ -14,6 +14,7 @@ pub const PIECE_KING: usize = 5;
 pub const NUM_PIECES: usize = 6;
 pub const NUM_PIECES_NO_KING: usize = 5;
 pub const PIECE_CHARS: [char; NUM_PIECES] = ['P', 'N', 'B', 'R', 'Q', 'K'];
+pub const PIECE_NAMES: [&str; NUM_PIECES] = ["Pawn", "Knight", "Bishop", "Rook", "Queen", "King"];
 
 ////////////////////////////////////////////////////////////////////////////
 

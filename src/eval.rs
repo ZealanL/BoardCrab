@@ -27,7 +27,7 @@ pub fn decay_eval(eval: Value) -> Value {
 
 //////////////////////////////////////////////////////////
 
-const PIECE_BASE_VALUES: [Value; NUM_PIECES-1] = [1.0, 3.2, 3.5, 5.2, 10.0];
+const PIECE_BASE_VALUES: [Value; NUM_PIECES] = [1.0, 3.2, 3.5, 5.2, 10.0, 1.0];
 
 // Returns the "attacking power" of a team from 0-1
 // This is meant to represent how capable the player is of making a deadly attack on the king
@@ -47,114 +47,190 @@ fn calc_attacking_power(board: &Board, team_idx: usize) -> Value {
     }
 }
 
-fn eval_piece_position(team_idx: usize, piece_idx: usize, piece_mask: BitMask, opp_attack_power: Value) -> Value {
-    const EDGE_MASK: BitMask = 0xff818181818181ff;
-    const CORNER_MASK: BitMask = 0x8100000000000081;
-    const CENTER_3_MASK: BitMask = 0x7e7e7e7e7e7e00;
-    const CENTER_2_MASK: BitMask = 0x3c3c3c3c0000;
-    const CENTER_1_MASK: BitMask = 0x1818000000;
-    const GOOD_BISHOP_MASK: BitMask = 0x422418183c7e00;
+const CENTER_26: BitMask = 0x183c7e7e3c1800; // Center-most 26 squares
+const CENTER_12: BitMask = 0x183c3c180000; // Center-most 12 squares
+const CENTER_4: BitMask = 0x7e7e7e7e7e7e00; // Center-most 4 squares
+const EDGES: BitMask = 0xff818181818181ff;
+const CORNER_MASK: BitMask = 0x8100000000000081;
+const ELEVATED_2: BitMask = 0xffff000000000000;
+const ELEVATED_4: BitMask = 0xffffffff00000000;
+const LIGHT_SQUARES: BitMask = 0x55aa55aa55aa55aa;
+const DARK_SQUARES: BitMask = !LIGHT_SQUARES;
+const COLOR_MASKS: [BitMask; 2] = [LIGHT_SQUARES, DARK_SQUARES];
 
-    let add_mask_bonus = |piece_mask: BitMask, bonus_mask: BitMask, bonus_scale: Value| -> Value {
-        let bonus_mask_absolute = if team_idx == 1 { bm_flip_vertical(bonus_mask) } else { bonus_mask };
-        ((piece_mask & bonus_mask_absolute).count_ones() as Value) * bonus_scale
-    };
+fn mask_eval(team_idx: usize, mut a: BitMask, b: BitMask, scale: Value) -> Value {
+    if team_idx == 1 {
+        a = bm_flip_vertical(a);
+    }
 
+    ((a & b).count_ones() as Value) * scale
+}
+
+fn get_pawn_attack_mask(board: &Board, team_idx: usize) -> BitMask {
+    let pawns = board.pieces[team_idx][PIECE_PAWN];
+
+    let mut capture_mask: BitMask = 0;
+    for side in 0..2 {
+        capture_mask |= bm_shift(pawns & [!bm_make_column(0), !bm_make_column(7)][side], [-1, 1][side], [1, -1][team_idx])
+    }
+
+    capture_mask
+}
+
+fn eval_piece_type(board: &Board, team_idx: usize, piece_idx: usize, piece_mask: BitMask, opp_attack_power: Value) -> Value {
     let mut value: Value = 0.0;
+
+    let team_pawns = board.pieces[team_idx][PIECE_PAWN];
+    let opp_pawns = board.pieces[1 - team_idx][PIECE_PAWN];
+    let pawn_attacks = get_pawn_attack_mask(board, team_idx);
 
     match piece_idx {
+        PIECE_PAWN => {
+            for pawn in bm_iter_bits(piece_mask) {
+                let (pawn_x, pawn_y) = bm_to_xy(pawn);
+                let pawn_rel_y = if team_idx == 0 { pawn_y } else { 7 - pawn_y };
+
+                let mut behind_rows: BitMask = (1u64 << (8 * (pawn_y + 1))) - 1;
+                if team_idx == 1 {
+                    behind_rows = bm_flip_vertical(behind_rows);
+                }
+
+                let column: BitMask = bm_make_column(pawn_x);
+                let columns =
+                    column
+                        | bm_shift(column & !bm_make_column(7),  1, 0)
+                        | bm_shift(column & !bm_make_column(0), -1, 0);
+
+                let pass_prev = columns & !behind_rows;
+
+                let is_passed = (pass_prev & opp_pawns) == 0;
+                let promote_thread_value;
+                {
+                    let promote_ratio = ((pawn_rel_y - 1) as Value) / 6.0;
+                    let promote_ratio_sq = promote_ratio * promote_ratio;
+                    let promote_threat_scale = 1.0 - (opp_attack_power * 0.7);
+
+                    if is_passed {
+                        promote_thread_value = promote_ratio_sq * 3.0 * promote_threat_scale;
+                    } else {
+                        promote_thread_value = promote_ratio_sq * 1.0 * promote_threat_scale;
+                    }
+                }
+
+                // TODO: Only needs to be able to count to 3
+                // TODO: Scale with distance between the pawns
+                let pawns_in_file = (piece_mask & column).count_ones();
+                let stacked_penalty = (((pawns_in_file - 1) as Value) / 2.0) * -0.3;
+
+                value += promote_thread_value + stacked_penalty;
+
+                let is_isolated = ((piece_mask & !pawn) & columns) == 0;
+                if is_isolated {
+                    value += -0.2 * (1.0 - opp_attack_power*0.3);
+                }
+
+                let connected = (pawn_attacks & pawn) != 0;
+                if connected {
+                    value += 0.15;
+                }
+
+                let in_center = (pawn & CENTER_4) != 0;
+                if in_center {
+                    value += 0.3;
+                }
+
+                if connected && in_center {
+                    value += 0.1; // Connected pawns in the center of the board are very strong
+                }
+            }
+        },
         PIECE_KNIGHT => {
-            value += add_mask_bonus(piece_mask, CENTER_1_MASK, 0.1);
-            value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.2);
-            value += add_mask_bonus(piece_mask, EDGE_MASK, -0.3);
-            value += add_mask_bonus(piece_mask, CORNER_MASK, -0.3);
+            // Bonus for central knights
+            value += mask_eval(team_idx, piece_mask, CENTER_12, 0.2);
+            value += mask_eval(team_idx, piece_mask, CENTER_26, 0.2);
+
+            // Squares that are pushed up onto the opponent's side
+            // Knights are very strong on these squares
+            const PUSHED_UP_CENTER_MASK: BitMask = 0x247e3c18000000;
+            value += mask_eval(team_idx, piece_mask, PUSHED_UP_CENTER_MASK, 0.4);
+
+            // Extra bonus for central knights defended by pawns
+            value += mask_eval(team_idx, piece_mask, CENTER_12, 0.15);
+
+            // Penalty for knights on the edge of the board, and again for corner
+            value += mask_eval(team_idx, piece_mask, EDGES, -0.3);
+            value += mask_eval(team_idx, piece_mask, CORNER_MASK, -0.3);
         },
         PIECE_BISHOP => {
-            value += add_mask_bonus(piece_mask, GOOD_BISHOP_MASK, 0.2);
-            value += add_mask_bonus(piece_mask, EDGE_MASK, -0.2);
+            // In middle games, have the bishops positioned in this mask
+            const GOOD_BISHOP_MASK_MG: BitMask = 0x422418183c7e00;
+            const BAD_BISHOP_MASK_MG: BitMask = 0xc381810000000000; // Top wing edges of the board
+            value += mask_eval(team_idx, piece_mask, GOOD_BISHOP_MASK_MG, 0.5 * opp_attack_power);
+            value += mask_eval(team_idx, piece_mask, BAD_BISHOP_MASK_MG, -0.5 * opp_attack_power);
+
+            // In end games, have the bishops towards the middle of the board
+            value += mask_eval(team_idx, piece_mask, CENTER_12, 0.4 * (1.0 - opp_attack_power));
+            value += mask_eval(team_idx, piece_mask, EDGES, -0.2 * (1.0 - opp_attack_power));
+
+            // Give penalties for bishops on the same square as pawns
+            let team_pawns = board.pieces[team_idx][PIECE_PAWN];
+            let opp_pawns = board.pieces[1 - team_idx][PIECE_PAWN];
+            for color_mask in COLOR_MASKS {
+                let bishops_of_color = (piece_mask & color_mask).count_ones();
+                let team_pawns_of_color = (team_pawns & color_mask).count_ones();
+                let opp_pawns_of_color = (opp_pawns & color_mask).count_ones();
+
+                // Big penalty for having our own pawns on the same color as our bishop
+                value += ((bishops_of_color * team_pawns_of_color) as Value) * -0.1;
+
+                // Smaller penalty for the opponent's pawns being on the same color as our bishop
+                value += ((bishops_of_color * opp_pawns_of_color) as Value) * -0.05;
+            }
         },
         PIECE_ROOK => {
-            value += add_mask_bonus(piece_mask, bm_make_row(7-1), 0.5);
-        }
+            // Bonus for more central rooks in the middlegame
+            value += mask_eval(team_idx, piece_mask, CENTER_26, 0.1 * opp_attack_power);
+            value += mask_eval(team_idx, piece_mask, CENTER_12, 0.15 * opp_attack_power);
+
+            // Bonus for elevated rooks in the middlegame
+            value += mask_eval(team_idx, piece_mask, ELEVATED_2, 0.4 * opp_attack_power);
+            value += mask_eval(team_idx, piece_mask, ELEVATED_4, 0.2 * opp_attack_power);
+
+            let all_pawns = board.pieces[0][PIECE_PAWN] | board.pieces[1][PIECE_PAWN];
+            for x in 0..8 {
+                let file = bm_make_column(x);
+
+                // TODO: Only need to count to 2
+                let pawns_in_file = (all_pawns & file).count_ones();
+                let rooks_in_file = (piece_mask & file).count_ones();
+
+                if pawns_in_file == 0 {
+                    // Open file
+                    value += (rooks_in_file as Value) * 0.4;
+                } else if pawns_in_file == 1 {
+                    // Half-open
+                    value += (rooks_in_file as Value) * 0.2;
+                }
+            }
+        },
         PIECE_QUEEN => {
-            value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.5);
-        }
-        PIECE_KING => {
-            value += add_mask_bonus(piece_mask, CENTER_1_MASK, 0.2 * (1.0 - opp_attack_power));
-            value += add_mask_bonus(piece_mask, CENTER_2_MASK, 0.2 * (1.0 - opp_attack_power));
-            value += add_mask_bonus(piece_mask, CENTER_3_MASK, 0.1 * (1.0 - opp_attack_power));
+            // Slight bonus for having a central queen
+            value += mask_eval(team_idx, piece_mask, CENTER_26, 0.15);
+
+            // Slight bonus for having an elevated queen in the middlegame
+            value += mask_eval(team_idx, piece_mask, ELEVATED_2, 0.12 * opp_attack_power);
+            value += mask_eval(team_idx, piece_mask, ELEVATED_4, 0.12 * opp_attack_power);
+        },
+        PIECE_KING => { // King
+            // Centralize the king in endgames
+            value += mask_eval(team_idx, piece_mask, CENTER_12, 0.2 * (1.0 - opp_attack_power));
+            value += mask_eval(team_idx, piece_mask, CENTER_26, 0.2 * (1.0 - opp_attack_power));
+
+            let king_attacks = lookup_gen::get_piece_base_tos(PIECE_KING, bm_to_idx(piece_mask));
+            // Slight bonus for defending our pawns with our king in endgames
+            value += mask_eval(team_idx, king_attacks, team_pawns, 0.1 * (1.0 - opp_attack_power));
         }
         _ => {}
-    }
-
-    value
-}
-
-fn eval_piece_masked_positioning(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
-    // Ref: https://www.chessprogramming.org/Simplified_Evaluation_Function
-
-    // For some simpler evals, we will use bit-masking popcounts instead of lookup tables
-
-    let mut value: Value = 0.0;
-
-    for piece_idx in 0..NUM_PIECES {
-        let piece_mask = board.pieces[team_idx][piece_idx];
-
-        value += eval_piece_position(team_idx, piece_idx, piece_mask, opp_attack_power);
-    }
-
-    value
-}
-
-fn eval_pawns(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
-    let mut value: Value = 0.0;
-    let pawns = board.pieces[team_idx][PIECE_PAWN];
-    let opp_pawns = board.pieces[1 - team_idx][PIECE_PAWN];
-
-    for pawn in bm_iter_bits(pawns) {
-        let (pawn_x, pawn_y) = bm_to_xy(pawn);
-        let pawn_rel_y = if team_idx == 0 { pawn_y } else { 7 - pawn_y };
-
-        let mut behind_rows: BitMask = (1u64 << (8 * (pawn_y + 1))) - 1;
-        if team_idx == 1 {
-            behind_rows = bm_flip_vertical(behind_rows);
-        }
-
-        let column: BitMask = bm_make_column(pawn_x);
-        let columns =
-            column
-                | bm_shift(column & !bm_make_column(7),  1, 0)
-                | bm_shift(column & !bm_make_column(0), -1, 0);
-
-        let pass_prev = columns & !behind_rows;
-
-        let is_passed = (pass_prev & opp_pawns) == 0;
-        let promote_thread_value;
-        {
-            let promote_ratio = ((pawn_rel_y - 1) as Value) / 6.0;
-            let promote_ratio_sq = promote_ratio * promote_ratio;
-            let promote_threat_scale = 1.0 - (opp_attack_power * 0.7);
-
-            if is_passed {
-                promote_thread_value = promote_ratio_sq * 3.0 * promote_threat_scale;
-            } else {
-                promote_thread_value = promote_ratio_sq * 1.0 * promote_threat_scale;
-            }
-        }
-
-        // TODO: Only needs to be able to count to 3
-        // TODO: Scale with distance between the pawns
-        let pawns_in_file = (pawns & column).count_ones();
-        let stacked_penalty = (((pawns_in_file - 1) as Value) / 2.0) * -0.3;
-
-        value += promote_thread_value + stacked_penalty;
-
-        let is_isolated = ((pawns & !pawn) & columns) == 0;
-        if is_isolated {
-            value += -0.2 * (1.0 - opp_attack_power*0.3);
-        }
-
-        // TODO: Penalize backwards pawns?
     }
 
     value
@@ -164,10 +240,8 @@ fn eval_center_control(board: &Board, team_idx: usize) -> Value {
     const CENTER_12: BitMask = 0x183c3c180000; // Center-most 12 squares
 
     let attack_center_count = (board.attacks[team_idx] & CENTER_12).count_ones();
-    let pawns_in_center = (board.pieces[team_idx][PIECE_PAWN] & CENTER_12).count_ones();
 
     (attack_center_count as Value) * 0.05
-    + (pawns_in_center as Value) * 0.05
 }
 
 fn eval_mobility(board: &Board, team_idx: usize) -> Value {
@@ -205,7 +279,7 @@ fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> 
         let directly_above_king = (squares_above_king_1 | squares_above_king_2) & bm_make_row(king_y);
         if (pawns & directly_above_king) == 0 {
             // Penalize the coverage frac if the pawn directly above the king is missing
-            pawn_coverage_frac *= 0.5;
+            pawn_coverage_frac *= 0.65;
         }
     }
 
@@ -213,11 +287,14 @@ fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> 
     let king_height_frac = ((king_y - back_rank_y).abs() as Value) / 8.0;
     let king_off_center_frac = (((king_x as Value) - 3.5).abs() / 3.5).min(0.8); // We don't care about the very corner
 
-    // TODO: Implement king accessibility by pretending the king is a queen
+    // Pretending the king is a queen to measure accessibility
+    let accessible_squares = lookup_gen::get_piece_tos(PIECE_QUEEN, king, king_pos_idx, board.occupancy[team_idx]).count_ones();
+    let accessibility_penalty  = (accessible_squares as Value) * -0.05;
 
-    ((pawn_coverage_frac * 1.5)
-        + (king_height_frac * -2.0)
+    ((pawn_coverage_frac * 0.5)
+        + (king_height_frac * -2.5)
         + (king_off_center_frac * 0.75)
+        + accessibility_penalty
     ) * opp_attack_power
 }
 
@@ -232,14 +309,15 @@ fn eval_material(board: &Board, team_idx: usize) -> Value {
     material_value
 }
 
-pub static SPECIAL_FLAG: bool = false;
-
 fn eval_team(board: &Board, team_idx: usize) -> Value {
     let opp_attack_power = calc_attacking_power(board, 1 - team_idx);
 
-    eval_material(board, team_idx)
-        + eval_pawns(board, team_idx, opp_attack_power)
-        + eval_piece_masked_positioning(board, team_idx, opp_attack_power)
+    let mut value = eval_material(board, team_idx);
+    for piece_idx in 0..NUM_PIECES {
+        value += eval_piece_type(board, team_idx, piece_idx, board.pieces[team_idx][piece_idx], opp_attack_power);
+    }
+
+    value
         + eval_center_control(board, team_idx)
         + eval_mobility(board, team_idx)
         + eval_king_safety(board, team_idx, opp_attack_power)
@@ -300,19 +378,38 @@ pub fn print_eval(board: &Board) {
 
     let attack_power = [calc_attacking_power(board, 0), calc_attacking_power(board, 1)];
     println!(
-        "{:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
-        "", "Material", "King Safety", "Pawns", "Pieces", "Center Ctrl", "Mobility"
+        "{:<14}   {:<6}   {:<6}",
+        "", "White", "Black"
     );
-    for i in 0..2 {
-        println!("{:>14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14} | {:<14}",
-            ["White", "Black"][i],
-            eval_material(board, i),
-            eval_king_safety(board, i, attack_power[1 - i]),
-            eval_pawns(board, i, attack_power[1 - i]),
-            eval_piece_masked_positioning(board, i, attack_power[1 - i]),
-            eval_center_control(board, i),
-            eval_mobility(board, i)
-        );
+
+    let team_vals = [eval_team(board, 0), eval_team(board, 1)];
+    let mut entries = [Vec::new(), Vec::new()];
+    for team_idx in 0..2 {
+        entries[team_idx].push(("Material".to_string(), eval_material(board, team_idx)));
+        for piece_idx in 0..NUM_PIECES {
+            let piece_type_eval = eval_piece_type(
+                board, team_idx, piece_idx, board.pieces[team_idx][piece_idx], attack_power[1 -team_idx]
+            );
+            entries[team_idx].push((PIECE_NAMES[piece_idx].to_string() + "s", piece_type_eval));
+        }
+        entries[team_idx].push(("Center Control".to_string(), eval_center_control(board, team_idx)));
+        entries[team_idx].push(("Mobility".to_string(), eval_mobility(board, team_idx)));
+        entries[team_idx].push(("King Safety".to_string(), eval_king_safety(board, team_idx, attack_power[1 -team_idx])));
+
+        entries[team_idx].push(("TOTAL ADV".to_string(), team_vals[team_idx] - team_vals[1 - team_idx]));
+    }
+
+
+    assert_eq!(entries[0].len(), entries[1].len());
+    let num_entries = entries[0].len();
+    for i in 0..num_entries {
+        if i == (num_entries - 1) {
+            println!("{}", "-".to_string().repeat(33));
+        }
+
+        let name = &entries[0][i].0;
+        let vals = [entries[0][i].1, entries[1][i].1];
+        println!("{:>14} | {:>+0width$.prec$} | {:>+0width$.prec$}", name, vals[0], vals[1], width=6, prec=2);
     }
 }
 
@@ -320,14 +417,18 @@ pub fn print_eval(board: &Board) {
 pub fn eval_move(board: &Board, mv: &Move) -> Value {
     const CAPTURE_BASE_BONUS: Value = 1.0; // Always give captures a bit of a bonus
     const CHECK_BONUS: Value = 1.0;
-    const PIN_BONUS: Value = 0.25;
+    const PIN_BONUS: Value = 0.0;
 
     let mut eval: Value = 0.0;
 
     let to_defended = (board.attacks[1 - board.turn_idx] & mv.to) != 0;
 
     if mv.has_flag(Move::FLAG_PROMOTION) {
-        eval += PIECE_BASE_VALUES[mv.to_piece_idx]
+        if mv.to_piece_idx == PIECE_QUEEN {
+            eval += 50.0; // Very important move to look at
+        } else {
+            eval -= 10.0; // Very rarely do we want to promote to something other than a queen
+        }
     }
 
     if mv.has_flag(Move::FLAG_CAPTURE) {
@@ -347,6 +448,7 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
         eval += capture_val;
     }
 
+    // Determine if the move is a check or pin
     let to_idx = bm_to_idx(mv.to);
     let opp_king_pos = board.pieces[1 - board.turn_idx][PIECE_KING];
     let next_base_moves = lookup_gen::get_piece_base_tos(mv.to_piece_idx, to_idx);
@@ -356,7 +458,7 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
         match mv.to_piece_idx {
             PIECE_BISHOP | PIECE_ROOK | PIECE_QUEEN => {
                 let between_mask = lookup_gen::get_between_mask_exclusive(bm_to_idx(opp_king_pos), to_idx);
-                let num_blockers = (board.combined_occupancy() & between_mask).count_ones(); // Only need to count to 2
+                let num_blockers = (board.combined_occupancy() & between_mask).count_ones(); // TODO: Only need to count to 2
                 is_check = num_blockers == 0;
                 is_pin = num_blockers == 1;
             },
@@ -377,8 +479,9 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
         eval -= PIECE_BASE_VALUES[mv.from_piece_idx];
     }
 
-    // TODO: Temporary attack power placeholder
-    eval += eval_piece_position(board.turn_idx, mv.to_piece_idx, mv.to, 1.0);
+    let opp_attack_power = calc_attacking_power(board, 1 - board.turn_idx);
+    eval -= eval_piece_type(board, board.turn_idx, mv.from_piece_idx, mv.from, opp_attack_power);
+    eval += eval_piece_type(board, board.turn_idx, mv.to_piece_idx, mv.to, opp_attack_power);
 
     eval
 }
