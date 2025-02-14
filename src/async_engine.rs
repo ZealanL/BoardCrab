@@ -76,11 +76,8 @@ impl AsyncEngine {
                             node_counts.push(search_info.total_nodes);
 
                             guessed_next_eval = Some(search_eval);
-
-                            let root_entry = table_ptr.get().get_wait(board.hash);
-
-                            if root_entry.is_valid() {
-                                best_moves.push(root_entry.best_move_idx);
+                            {
+                                best_moves.push(search_info.root_best_move_idx);
 
                                 if is_leader_thread && !search_eval.is_infinite() {
                                     // TODO: Somewhat lame to be calling UCI stuff from async_engine

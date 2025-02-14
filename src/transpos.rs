@@ -101,6 +101,18 @@ impl Table {
         }
     }
 
+    pub fn is_any_entry_locked(&self) -> bool{
+        for bucket in &self.buckets {
+            for entry in &bucket.entries {
+                if entry.is_set() && !entry.is_valid() {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
     fn get_bucket_idx(&self, hash: Hash) -> usize {
         (hash as usize) % self.buckets.len()
     }

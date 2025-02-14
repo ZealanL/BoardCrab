@@ -110,7 +110,8 @@ pub struct SearchInfo {
     pub depth_hashes: [Hash; 256], // For repetition detection
 
     // See https://www.chessprogramming.org/History_Heuristic
-    pub history_counters: [[usize; 64]; NUM_PIECES]
+    pub history_counters: [[usize; 64]; NUM_PIECES],
+    pub root_best_move_idx: u8
 }
 
 impl SearchInfo {
@@ -118,7 +119,8 @@ impl SearchInfo {
         SearchInfo {
             total_nodes: 0,
             depth_hashes: [0; 256],
-            history_counters: [[0; 64]; NUM_PIECES]
+            history_counters: [[0; 64]; NUM_PIECES],
+            root_best_move_idx: 0
         }
     }
 }
@@ -346,6 +348,10 @@ fn _search(
             }
         );
 
+        if depth_elapsed == 0 {
+            search_info.root_best_move_idx = best_move_idx as u8;
+        }
+
         best_eval
 
     } else {
@@ -408,8 +414,18 @@ pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
 
     loop {
 
-        let entry = table.get_wait(board.hash);
-        if entry.hash == board.hash {
+        let entry = table.get_fast(board.hash);
+
+        let valid;
+        if result.is_empty() {
+            // No PV yet, allow a locked entry
+            valid = entry.is_set();
+        } else {
+            // Require full validity
+            valid = entry.is_valid();
+        }
+
+        if valid {
             if found_hashes.contains(&board.hash) {
                 // Looped position
                 break;
