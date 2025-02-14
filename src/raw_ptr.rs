@@ -8,11 +8,9 @@ pub struct RawPtr<T> {
 
 impl<T> RawPtr<T> {
     pub fn new(val_ref: &mut T) -> RawPtr<T> {
-        unsafe {
-            let ptr = val_ref as *mut T;
-            let ptr_val = ptr as usize;
-            RawPtr { phantom: PhantomData::<T>, ptr_val }
-        }
+        let ptr = val_ref as *mut T;
+        let ptr_val = ptr as usize;
+        RawPtr { phantom: PhantomData::<T>, ptr_val }
     }
 
     pub fn get(&self) -> &mut T {

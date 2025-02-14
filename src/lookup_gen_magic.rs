@@ -49,7 +49,6 @@ pub fn get_rook_moves(pos_idx: usize, occupy: BitMask) -> BitMask {
 
 pub fn init() {
     println!("Generating magic bitboards...");
-    const BOARD_EDGES: BitMask = bm_make_row(0) | bm_make_row(7) | bm_make_column(0) | bm_make_column(7);
 
     let mut rng = rand::rngs::ThreadRng::default();
 

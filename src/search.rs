@@ -304,7 +304,7 @@ fn _search(
                 depth_reduction = 1;
             }
 
-            let mut next_eval = _search(
+            let next_eval = _search(
                     &next_board, table, search_info,
                     -upper_bound, -lower_bound,
                     depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
