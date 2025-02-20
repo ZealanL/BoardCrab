@@ -4,7 +4,7 @@ use board_crab_lib::search;
 fn do_test(name: &str, position_fen: &str, depth: usize, target_node_count: usize) {
     board_crab_lib::init();
     let board = fen::load_fen(position_fen).unwrap();
-    let perft_count = search::perft(&board, depth, false);
+    let perft_count = search::perft(&board, depth as u8, false);
 
     if perft_count != target_node_count {
         // Test failed

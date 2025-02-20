@@ -13,6 +13,7 @@ pub mod lookup_gen;
 pub mod lookup_gen_magic;
 pub mod time_manager;
 pub mod raw_ptr;
+mod eval_lookup;
 
 static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 

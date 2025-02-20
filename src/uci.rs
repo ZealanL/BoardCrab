@@ -113,8 +113,8 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
     let mut pairs = Vec::new();
     let mut singles = Vec::new();
     let mut i: usize = 1;
-    while i < parts.len() - 1 {
-        let parse_result = parts[i + 1].parse::<i64>();
+    while i < parts.len() {
+        let parse_result = parts[usize::min(i + 1, parts.len() - 1)].parse::<i64>();
         if parse_result.is_ok() {
             // Argument with number val
             pairs.push(
@@ -146,6 +146,10 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
             "movestogo" => {
                 time_state.moves_till_time_control = Some(pair.1 as u64);
             }
+            "perft" => {
+                search::perft(engine.get_board(), pair.1 as u8, true);
+                return true
+            }
             _ => {
                 if first_arg == remaining_time_str {
                     time_state.remaining_time = Some(pair.1 as f64 / 1000.0);
@@ -155,7 +159,6 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
 
             }
         }
-
     }
 
     engine.start_search(max_depth, Some(time_state));

@@ -8,7 +8,7 @@ use crate::raw_ptr::RawPtr;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 
-fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usize {
+fn _perft(board: &Board, depth: u8, depth_elapsed: usize, print: bool) -> usize {
     let mut moves = move_gen::MoveBuffer::new();
     move_gen::generate_moves(&board, &mut moves);
     if depth > 1 {
@@ -42,7 +42,7 @@ fn _perft(board: &Board, depth: usize, depth_elapsed: usize, print: bool) -> usi
     }
 }
 
-pub fn perft(board: &Board, depth: usize, print: bool) -> usize { _perft(board, depth, 0, print) }
+pub fn perft(board: &Board, depth: u8, print: bool) -> usize { _perft(board, depth, 0, print) }
 
 //////////////////////////////////////////////////////////////////////////
 
