@@ -301,7 +301,7 @@ fn _search(
 
             next_eval = _search(
                 &next_board, table, search_info,
-                -upper_bound, -lower_bound,
+                next_lower_bound, -lower_bound,
                 depth_remaining - depth_reduction, depth_elapsed + 1,
                 stop_flag, stop_time
             );
