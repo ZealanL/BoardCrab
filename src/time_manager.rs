@@ -1,4 +1,3 @@
-use std::cmp::max;
 use crate::board::*;
 
 pub struct TimeState {

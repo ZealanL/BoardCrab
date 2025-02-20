@@ -1,6 +1,5 @@
 use std::thread;
 use std::sync::Arc;
-use std::sync::RwLock;
 use crate::board::*;
 use crate::move_gen;
 use crate::search;

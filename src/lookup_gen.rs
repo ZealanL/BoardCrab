@@ -229,6 +229,7 @@ pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize,
         PIECE_BISHOP | PIECE_ROOK | PIECE_QUEEN => {
             #[cfg(not(debug_assertions))]
             return get_slider_tos_fast(piece_idx, piece_pos_idx, occupy);
+            #[cfg(debug_assertions)]
             get_slider_tos_slow(piece_idx, piece_pos_idx, occupy)
         },
         _ => { // Non-sliding

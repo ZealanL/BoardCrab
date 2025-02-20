@@ -30,7 +30,6 @@ pub fn decay_eval(eval: Value) -> Value {
 
 const LIGHT_SQUARES: BitMask = 0x55aa55aa55aa55aa;
 const DARK_SQUARES: BitMask = !LIGHT_SQUARES;
-const COLOR_MASKS: [BitMask; 2] = [LIGHT_SQUARES, DARK_SQUARES];
 
 // Returns the "attacking power" of a team from 0-1
 // This is meant to represent how capable the player is of making a deadly attack on the king
@@ -149,9 +148,8 @@ fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> 
 
     let king = board.pieces[team_idx][PIECE_KING];
     let king_pos_idx = bm_to_idx(king);
-    let (king_x, king_y) = bm_to_xy(king);
+    let (_king_x, king_y) = bm_to_xy(king);
 
-    let back_rank_y: i64 = [0, 7][team_idx];
     let top_rank_y: i64 = [7, 0][team_idx];
     let up_dir: i64 = [1, -1][team_idx];
 

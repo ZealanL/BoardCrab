@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use rand::RngCore;
 use crate::bitmask::*;
 use crate::board::*;

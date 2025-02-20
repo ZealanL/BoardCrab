@@ -78,7 +78,6 @@ pub const BLOCKING_PAWNS: [f32; 2] = [-0.070, -0.077];
 pub const DOUBLED_PAWNS: [f32; 2] = [-0.052, -0.137];
 pub const CONNECTED_PAWNS: [f32; 2] = [ 0.149,  0.101];
 pub const OPEN_ROOKS: [f32; 2] = [ 0.347,  0.047];
-pub const ATTACK_COUNT: [f32; 2] = [ 0.007, -0.022];
 pub const KING_PAWN_COVER: [f32; 2] = [ 0.140, -0.064];
 pub const KING_ACCESSIBILITY: [f32; 2] = [-0.056,  0.013];
 pub const TURN_BONUS: [f32; 2] = [ 0.242,  0.176];

@@ -49,10 +49,6 @@ fn get_no_moves_eval(board: &Board) -> Value {
     if board.checkers != 0 { -VALUE_CHECKMATE } else { 0.0 }
 }
 
-fn is_extending_move(mv: &Move) -> bool {
-    mv.has_flag(Move::FLAG_CAPTURE) || mv.has_flag(Move::FLAG_PROMOTION)
-}
-
 pub struct SearchInfo {
     pub total_nodes: usize,
     pub depth_hashes: [Hash; 256], // For repetition detection
