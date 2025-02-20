@@ -31,7 +31,7 @@ const PIECE_BASE_VALUES: [Value; NUM_PIECES] = [1.0, 3.2, 3.5, 5.2, 10.0, 1.0];
 
 // Returns the "attacking power" of a team from 0-1
 // This is meant to represent how capable the player is of making a deadly attack on the king
-fn calc_attacking_power(board: &Board, team_idx: usize) -> Value {
+pub fn calc_attacking_power(board: &Board, team_idx: usize) -> Value {
     let rook_count = board.pieces[team_idx][PIECE_ROOK].count_ones();
     if board.pieces[team_idx][PIECE_QUEEN] != 0 {
         let bishop_count = board.pieces[team_idx][PIECE_BISHOP].count_ones();
@@ -386,7 +386,6 @@ pub fn print_eval(board: &Board) {
         entries[team_idx].push(("TOTAL ADV".to_string(), team_vals[team_idx] - team_vals[1 - team_idx]));
     }
 
-
     assert_eq!(entries[0].len(), entries[1].len());
     let num_entries = entries[0].len();
     for i in 0..num_entries {
@@ -405,6 +404,7 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
     const CAPTURE_BASE_BONUS: Value = 1.0; // Always give captures a bit of a bonus
     const CHECK_BONUS: Value = 1.0;
     const PIN_BONUS: Value = 0.0;
+    const TURN_BONUS: Value = 0.1;
 
     let mut eval: Value = 0.0;
 
@@ -466,9 +466,7 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
         eval -= PIECE_BASE_VALUES[mv.from_piece_idx];
     }
 
-    let opp_attack_power = calc_attacking_power(board, 1 - board.turn_idx);
-    eval -= eval_piece_type(board, board.turn_idx, mv.from_piece_idx, mv.from, opp_attack_power);
-    eval += eval_piece_type(board, board.turn_idx, mv.to_piece_idx, mv.to, opp_attack_power);
+    eval += TURN_BONUS;
 
     eval
 }
