@@ -164,7 +164,7 @@ fn _search(
     // https://www.chessprogramming.org/Null_Move_Pruning
     if cur_eval >= upper_bound &&
         board.checkers == 0 &&
-        depth_remaining >= 2 &&
+        depth_remaining >= 1 &&
         depth_elapsed >= 2
     {
         let king_and_pawn = board.pieces[board.turn_idx][PIECE_PAWN] | board.pieces[board.turn_idx][PIECE_KING];
@@ -176,7 +176,7 @@ fn _search(
             let next_depth = depth_remaining / 2;
             let next_result = _search(
                 &next_board, table, search_info,
-                -upper_bound, -lower_bound,
+                -upper_bound, -upper_bound + 0.01,
                 next_depth, depth_elapsed + 1,
                 stop_flag, stop_time
             );
@@ -202,9 +202,11 @@ fn _search(
 
     let table_best_move_idx;
     if table_best_move.is_some() {
-        table_best_move_idx = table_best_move.unwrap() as usize;
-        if table_best_move_idx >= moves.len() {
-            panic!("Out-of-bounds table best move index");
+        if (table_best_move.unwrap() as usize) < moves.len() {
+            table_best_move_idx = table_best_move.unwrap() as usize;
+        } else {
+            debug_assert!(false);
+            table_best_move_idx = usize::MAX;
         }
     } else {
         table_best_move_idx = usize::MAX;
@@ -225,7 +227,7 @@ fn _search(
 
         if is_quiet {
             let history_value = search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)];
-            move_eval += history_value / 50.0;
+            move_eval += history_value * 0.02;
         }
 
         if i == table_best_move_idx {
@@ -274,9 +276,11 @@ fn _search(
         let mut depth_reduction: u8 = 1;
 
         if is_quiet_not_check {
-            if depth_elapsed >= 3 && depth_remaining >= 2 && i >= 3 {
-                // Reduce moves
-                depth_reduction += u8::min(depth_remaining - 3, i as u8);
+            // Late move reduction
+            if depth_elapsed >= 3 && i >= 1 {
+                let reduction_frac = (((i + 1) as f32) / (rated_moves.len() as f32)).sqrt();
+                let reduction_amount = reduction_frac * (depth_remaining as f32) * 0.5;
+                depth_reduction += reduction_amount.round() as u8;
             }
         } else if gives_check {
             depth_reduction = 0; // Extend after a check
@@ -287,6 +291,15 @@ fn _search(
 
         let mut next_eval: Value;
         loop {
+
+            let next_lower_bound;
+            if depth_reduction > 1 {
+                // Search with a null window
+                next_lower_bound = -lower_bound - 0.01;
+            } else {
+                next_lower_bound = -upper_bound;
+            }
+
             next_eval = _search(
                 &next_board, table, search_info,
                 -upper_bound, -lower_bound,
@@ -322,6 +335,12 @@ fn _search(
                     // Higher depth means better search and thus better quality info on how good this move is
                     let history_weight = 1.0 / (depth_elapsed as Value);
                     search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)] += history_weight;
+
+                    // Penalize all the moves we already searched
+                    for j in 0..i {
+                        let omv = &moves[rated_moves[j].idx];
+                        search_info.history_values[board.turn_idx][omv.from_piece_idx][bm_to_idx(omv.to)] -= history_weight / (i as Value);
+                    }
                 }
                 break
             }
