@@ -4,7 +4,6 @@ use crate::board::*;
 use crate::eval::*;
 use crate::move_gen;
 use crate::zobrist::Hash;
-use crate::move_gen::MoveBuffer;
 use crate::raw_ptr::RawPtr;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
@@ -55,62 +54,12 @@ fn is_extending_move(mv: &Move) -> bool {
     mv.has_flag(Move::FLAG_CAPTURE) || mv.has_flag(Move::FLAG_PROMOTION)
 }
 
-// Maximum depth to extend searches to
-const MAX_EXTENSION_DEPTH: usize = 4;
-
-// Searches only extending moves
-fn extension_search(board: &Board, search_info: &mut SearchInfo, mut lower_bound: Value, upper_bound: Value, depth_remaining: usize) -> Value {
-    search_info.total_nodes += 1;
-
-    // Ref: https://www.chessprogramming.org/Quiescence_Search
-    let mut best_eval = eval_board(board);
-
-    if best_eval >= upper_bound {
-        return best_eval;
-    } else if best_eval > lower_bound {
-        lower_bound = best_eval;
-    }
-
-    if depth_remaining == 0 {
-        return best_eval;
-    }
-
-    let mut moves = move_gen::MoveBuffer::new();
-    move_gen::generate_moves(board, &mut moves);
-    if moves.is_empty() {
-        return get_no_moves_eval(board);
-    }
-    for mv in moves.iter() {
-        if !is_extending_move(mv) {
-            continue
-        }
-
-        let mut next_board = board.clone();
-        next_board.do_move(mv);
-        let base_next_eval = extension_search(&next_board, search_info, -upper_bound, -lower_bound, depth_remaining - 1);
-        let next_eval = decay_eval(-base_next_eval);
-
-        if next_eval > best_eval {
-            best_eval = next_eval;
-
-            if next_eval > lower_bound {
-                lower_bound = best_eval
-            }
-            if next_eval >= upper_bound {
-                break;
-            }
-        }
-    }
-
-    best_eval
-}
-
 pub struct SearchInfo {
     pub total_nodes: usize,
     pub depth_hashes: [Hash; 256], // For repetition detection
 
     // See https://www.chessprogramming.org/History_Heuristic
-    pub history_counters: [[usize; 64]; NUM_PIECES],
+    pub history_values: [[[Value; 64]; NUM_PIECES]; 2],
     pub root_best_move_idx: u8
 }
 
@@ -119,7 +68,7 @@ impl SearchInfo {
         SearchInfo {
             total_nodes: 0,
             depth_hashes: [0; 256],
-            history_counters: [[0; 64]; NUM_PIECES],
+            history_values: [[[0.0; 64]; NUM_PIECES]; 2],
             root_best_move_idx: 0
         }
     }
@@ -128,10 +77,12 @@ impl SearchInfo {
 fn _search(
     board: &Board, table: &RawPtr<transpos::Table>, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
-    depth_remaining: u8, depth_elapsed: u8,
+    depth_remaining: u8, depth_elapsed: i64,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> Value {
 
     search_info.total_nodes += 1;
+
+    let in_extension = depth_remaining == 0;
 
     // Check draw by repetition
     for i in (4..12).step_by(2) {
@@ -160,12 +111,26 @@ fn _search(
         }
     }
 
+    let mut best_eval = -VALUE_INF;
+    let cur_eval = eval_board(board);
+    if in_extension {
+        // Standing pat eval in extension search
+        best_eval = cur_eval;
+
+        if best_eval >= upper_bound {
+            return best_eval;
+        } else if best_eval > lower_bound {
+            lower_bound = best_eval;
+        }
+    }
+
     let table_entry = table.get().get_fast(board.hash);
 
     // Table lookup
     let mut table_best_move: Option<u8> = None;
     if table_entry.is_valid() {
-        if table_entry.depth_remaining >= depth_remaining {
+        // NOTE: In extensions, this depth check won't work because depth_remaining is stuck at 0
+        if table_entry.depth_remaining >= depth_remaining && !in_extension {
             match table_entry.entry_type {
                 transpos::EntryType::FailLow => {
                     // Exceeds our lower bound, do a cutoff
@@ -197,8 +162,9 @@ fn _search(
 
     // Null move pruning
     // https://www.chessprogramming.org/Null_Move_Pruning
-    if board.checkers == 0 &&
-        depth_remaining >= 4 &&
+    if cur_eval >= upper_bound &&
+        board.checkers == 0 &&
+        depth_remaining >= 2 &&
         depth_elapsed >= 2
     {
         let king_and_pawn = board.pieces[board.turn_idx][PIECE_PAWN] | board.pieces[board.turn_idx][PIECE_KING];
@@ -207,11 +173,11 @@ fn _search(
             let mut next_board = board.clone();
             next_board.do_null_move();
 
-            let depth_reduction = depth_remaining / 3;
+            let next_depth = depth_remaining / 2;
             let next_result = _search(
                 &next_board, table, search_info,
                 -upper_bound, -lower_bound,
-                depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
+                next_depth, depth_elapsed + 1,
                 stop_flag, stop_time
             );
 
@@ -222,141 +188,164 @@ fn _search(
         }
     }
 
-    if depth_remaining > 0 {
-        let mut moves = MoveBuffer::new();
-        move_gen::generate_moves(&board, &mut moves);
-        if moves.is_empty() {
-            return get_no_moves_eval(board);
+    let mut moves = move_gen::MoveBuffer::new();
+    move_gen::generate_moves(&board, &mut moves);
+    if moves.is_empty() {
+        return get_no_moves_eval(board);
+    }
+
+    #[derive(Copy, Clone)]
+    struct RatedMove {
+        idx: usize,
+        eval: Value
+    }
+
+    let table_best_move_idx;
+    if table_best_move.is_some() {
+        table_best_move_idx = table_best_move.unwrap() as usize;
+        if table_best_move_idx >= moves.len() {
+            panic!("Out-of-bounds table best move index");
         }
+    } else {
+        table_best_move_idx = usize::MAX;
+    }
 
-        #[derive(Copy, Clone)]
-        struct RatedMove {
-            idx: usize,
-            eval: Value
-        }
+    let mut rated_moves: Vec<RatedMove> = Vec::with_capacity(moves.len());
+    for i in 0..moves.len() {
+        let mv = moves[i];
+        let is_quiet = mv.is_quiet();
 
-        let mut rated_moves: Vec<RatedMove> = Vec::with_capacity(moves.len());
-        for i in 0..moves.len() {
-            let mv = moves[i];
-            let is_quiet = mv.is_quiet();
-
-            let move_score;
+        if in_extension {
             if is_quiet {
-                let history_counter = search_info.history_counters[mv.from_piece_idx][bm_to_idx(mv.to)];
-
-                // Decay range from 0-1
-                // This prioritizes accuracy in smaller values, which are more common
-                move_score = 1.0 - (1.0 / (1.0 + (history_counter as Value)/100.0));
-            }  else {
-                let move_eval = eval_move(board, &mv);
-
-                // Move out of the [0, 1] range of quiet history moves
-                move_score = if move_eval > 0.0 { move_eval + 1.0 } else { move_eval };
-            }
-            rated_moves.push(
-                RatedMove {
-                    idx: i,
-                    eval: move_score
-                }
-            )
-        }
-
-        if table_best_move.is_some() {
-            let table_best_move_idx = table_best_move.unwrap() as usize;
-            if table_best_move_idx >= rated_moves.len() {
-                panic!("OOB table best move index");
-            }
-            rated_moves[table_best_move_idx].eval = VALUE_INF;
-        }
-
-        // Insertion sort
-        for i in 1..rated_moves.len() {
-            let mut j = i;
-            while j > 0 {
-                let prev = rated_moves[j - 1];
-                let cur = rated_moves[j];
-
-                if cur.eval > prev.eval {
-                    // Swap
-                    rated_moves[j - 1] = cur;
-                    rated_moves[j] = prev;
-                } else {
-                    break
-                }
-
-                j -= 1;
+                continue // Only captures allowed in extensions
             }
         }
 
-        let mut best_eval = -VALUE_INF;
-        let mut best_move_idx: usize = 0;
-        for i in 0..rated_moves.len() {
-            let move_idx = rated_moves[i].idx;
-            let move_eval = rated_moves[i].eval;
-            let mv = &moves[move_idx];
+        let mut move_eval = eval_move(board, &mv);
 
-            let mut next_board: Board = board.clone();
-            next_board.do_move(mv);
+        if is_quiet {
+            let history_value = search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)];
+            move_eval += history_value / 50.0;
+        }
 
-            // Late move reduction
-            let mut depth_reduction: u8 = 0;
-            if i >= 4 && depth_remaining <= 4 && depth_remaining >= 2
-                && best_eval < lower_bound
-                && (mv.is_quiet() || move_eval < 0.0) {
-                depth_reduction = 1;
+        if i == table_best_move_idx {
+            move_eval = Value::MAX;
+        }
+
+        rated_moves.push(
+            RatedMove {
+                idx: i,
+                eval: move_eval
+            }
+        )
+    }
+
+    // Insertion sort
+    for i in 1..rated_moves.len() {
+        let mut j = i;
+        while j > 0 {
+            let prev = rated_moves[j - 1];
+            let cur = rated_moves[j];
+
+            if cur.eval > prev.eval {
+                // Swap
+                rated_moves[j - 1] = cur;
+                rated_moves[j] = prev;
+            } else {
+                break
             }
 
-            let next_eval = _search(
-                    &next_board, table, search_info,
-                    -upper_bound, -lower_bound,
-                    depth_remaining - 1 - depth_reduction, depth_elapsed + 1,
-                    stop_flag, stop_time
+            j -= 1;
+        }
+    }
+
+    let mut best_move_idx: usize = 0;
+    for i in 0..rated_moves.len() {
+        let move_idx = rated_moves[i].idx;
+        let move_eval = rated_moves[i].eval;
+        let mv = &moves[move_idx];
+
+        let mut next_board: Board = board.clone();
+        next_board.do_move(mv);
+
+        let gives_check = next_board.checkers != 0;
+        let is_quiet_not_check = mv.is_quiet() && !gives_check;
+
+        let mut depth_reduction: u8 = 1;
+
+        if is_quiet_not_check {
+            if depth_elapsed >= 3 && depth_remaining >= 2 && i >= 3 {
+                // Reduce moves
+                depth_reduction += u8::min(depth_remaining - 3, i as u8);
+            }
+        } else if gives_check {
+            depth_reduction = 0; // Extend after a check
+        }
+
+        // Prevent depth reduction overflow
+        depth_reduction = u8::min(depth_reduction, depth_remaining);
+
+        let mut next_eval: Value;
+        loop {
+            next_eval = _search(
+                &next_board, table, search_info,
+                -upper_bound, -lower_bound,
+                depth_remaining - depth_reduction, depth_elapsed + 1,
+                stop_flag, stop_time
             );
 
             if next_eval.is_infinite() {
                 return VALUE_INF;
             }
 
-            let next_eval = decay_eval(-next_eval);
-            if next_eval > best_eval {
-                best_eval = next_eval;
-                best_move_idx = move_idx;
-                if next_eval > lower_bound {
-                    lower_bound = next_eval;
-                }
+            next_eval = decay_eval(-next_eval);
 
-                if next_eval >= upper_bound {
-                    // Failed high, beta cut-off
-                    if mv.is_quiet() {
-                        search_info.history_counters[mv.from_piece_idx][bm_to_idx(mv.to)] += 1;
-                    }
-                    break
-                }
+            if depth_reduction > 1 && next_eval > lower_bound {
+                // Exceeded lower bound, we need to do a full search
+                depth_reduction = 1;
+                continue
             }
+
+            break;
         }
 
-        table.get().set(
-            board.hash, best_eval, best_move_idx as u8, depth_remaining,
-            {
-                if best_eval >= upper_bound {
-                    transpos::EntryType::FailHigh
-                } else if best_eval <= lower_bound {
-                    transpos::EntryType::FailLow
-                } else {
-                    transpos::EntryType::Exact
-                }
+        if next_eval > best_eval {
+            best_eval = next_eval;
+            best_move_idx = move_idx;
+            if next_eval > lower_bound {
+                lower_bound = next_eval;
             }
-        );
 
-        if depth_elapsed == 0 {
-            search_info.root_best_move_idx = best_move_idx as u8;
+            if next_eval >= upper_bound {
+                // Failed high, beta cut-off
+                if mv.is_quiet() {
+                    // Higher depth means better search and thus better quality info on how good this move is
+                    let history_weight = 1.0 / (depth_elapsed as Value);
+                    search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)] += history_weight;
+                }
+                break
+            }
         }
-
-        best_eval
-
-    } else {
-        extension_search(board, search_info, lower_bound, upper_bound, MAX_EXTENSION_DEPTH)
     }
+
+    table.get().set(
+        board.hash, best_eval, best_move_idx as u8, depth_remaining,
+        {
+            if best_eval >= upper_bound {
+                transpos::EntryType::FailHigh
+            } else if best_eval <= lower_bound {
+                transpos::EntryType::FailLow
+            } else {
+                transpos::EntryType::Exact
+            }
+        }
+    );
+
+    if depth_elapsed == 0 {
+        search_info.root_best_move_idx = best_move_idx as u8;
+    }
+
+    best_eval
 }
 
 pub fn search(
@@ -370,7 +359,6 @@ pub fn search(
         // Use a growing aspiration window
         const WINDOW_RANGE_GUESS: Value = 0.3; // Range of the window if there is a guessed eval
         const WINDOW_RANGE_NO_GUESS: Value = 1.0; // Range of the window if there isn't guessed eval
-        const WINDOW_PAD: Value = 5.0; // Amount to pad the window after it fails
         let window_start_center = if guessed_eval.is_some() { guessed_eval.unwrap() } else { eval_board(board) };
 
         let mut window_min = window_start_center;
@@ -384,28 +372,21 @@ pub fn search(
             window_max += WINDOW_RANGE_NO_GUESS / 2.0;
         }
 
-        loop {
-            let eval = _search(
-                board, &table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
-            );
-
-            if eval > window_max {
-                window_max = eval + WINDOW_PAD;
-            } else if eval < window_min {
-                window_min = eval - WINDOW_PAD;
-            } else {
-                // Window was sufficient
-                return (eval, search_info);
-            }
-        }
-    } else {
-        // Very low-depth, aspiration window isn't as helpful
-        let search_result = _search(
-            board, &table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+        let eval = _search(
+            board, &table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
         );
 
-        (search_result, search_info)
+        if eval >= window_min && eval < window_max {
+            // Window was sufficient
+            return (eval, search_info);
+        }
     }
+
+    let search_result = _search(
+        board, &table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+    );
+
+    (search_result, search_info)
 }
 
 pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
@@ -433,7 +414,7 @@ pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
                 found_hashes.insert(board.hash);
             }
 
-            let mut moves = MoveBuffer::new();
+            let mut moves = move_gen::MoveBuffer::new();
             move_gen::generate_moves(&board, &mut moves);
 
             let best_move_idx = entry.best_move_idx as usize;
