@@ -5,7 +5,6 @@ use crate::board::*;
 use crate::move_gen;
 use crate::search;
 use crate::eval::*;
-use crate::raw_ptr::RawPtr;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 use crate::uci;
@@ -13,7 +12,7 @@ use crate::time_manager;
 
 pub struct AsyncEngine {
     board: Board,
-    table: transpos::Table,
+    arc_table: Arc<transpos::Table>,
     stop_flag: ThreadFlag,
     thread_join_handles: Vec<thread::JoinHandle<Option<u8>>> // Outputs best move idx
 }
@@ -22,7 +21,7 @@ impl AsyncEngine {
     pub fn new(table_size_mbs: usize) -> AsyncEngine {
         AsyncEngine {
             board: Board::start_pos(),
-            table: transpos::Table::new(table_size_mbs),
+            arc_table: Arc::new(transpos::Table::new(table_size_mbs)),
             stop_flag: ThreadFlag::new(),
             thread_join_handles: Vec::new()
         }
@@ -48,10 +47,14 @@ impl AsyncEngine {
         for thread_idx in 0..num_threads {
             let board = self.board.clone();
             let stop_flag = self.stop_flag.clone();
-            let table_ptr = RawPtr::<transpos::Table>::new(&mut self.table);
+            let table_ref = Arc::clone(&self.arc_table);
 
             self.thread_join_handles.push(
                 thread::spawn(move || {
+
+                    // Unsafe deference the table
+                    let table_ptr = Arc::as_ptr(&table_ref);
+                    let table = unsafe { &mut *(table_ptr as *mut transpos::Table) };
 
                     let is_leader_thread = thread_idx == 0;
 
@@ -63,7 +66,7 @@ impl AsyncEngine {
 
                         {
                             let (search_eval, search_info) = search::search(
-                                &board, &table_ptr, depth,
+                                &board, table, depth,
                                 guessed_next_eval,
                                 Some(&stop_flag), stop_time
                             );
@@ -82,7 +85,7 @@ impl AsyncEngine {
                                 if is_leader_thread && !search_eval.is_infinite() {
                                     // TODO: Somewhat lame to be calling UCI stuff from async_engine
                                     let elapsed_time = std::time::Instant::now() - start_time;
-                                    uci::print_search_results(&board, table_ptr.get(), depth, search_eval, &search_info, elapsed_time.as_secs_f64());
+                                    uci::print_search_results(&board, table, depth, search_eval, &search_info, elapsed_time.as_secs_f64());
                                 }
 
                                 if stop_time.is_some() {

@@ -4,7 +4,6 @@ use crate::board::*;
 use crate::eval::*;
 use crate::move_gen;
 use crate::zobrist::Hash;
-use crate::raw_ptr::RawPtr;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 
@@ -75,7 +74,7 @@ impl SearchInfo {
 }
 
 fn _search(
-    board: &Board, table: &RawPtr<transpos::Table>, search_info: &mut SearchInfo,
+    board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: i64,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> Value {
@@ -124,7 +123,7 @@ fn _search(
         }
     }
 
-    let table_entry = table.get().get_fast(board.hash);
+    let table_entry = table.get_fast(board.hash);
 
     // Table lookup
     let mut table_best_move: Option<u8> = None;
@@ -347,7 +346,7 @@ fn _search(
         }
     }
 
-    table.get().set(
+    table.set(
         board.hash, best_eval, best_move_idx as u8, depth_remaining,
         {
             if best_eval >= upper_bound {
@@ -368,7 +367,7 @@ fn _search(
 }
 
 pub fn search(
-    board: &Board, table: &RawPtr<transpos::Table>, depth: u8,
+    board: &Board, table: &mut transpos::Table, depth: u8,
     guessed_eval: Option<Value>,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (Value, SearchInfo) {
 
@@ -392,7 +391,7 @@ pub fn search(
         }
 
         let eval = _search(
-            board, &table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+            board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
         );
 
         if eval >= window_min && eval < window_max {
@@ -402,7 +401,7 @@ pub fn search(
     }
 
     let search_result = _search(
-        board, &table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+        board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
     );
 
     (search_result, search_info)

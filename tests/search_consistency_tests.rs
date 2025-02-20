@@ -1,6 +1,5 @@
 use board_crab_lib::eval::Value;
 use board_crab_lib::fen;
-use board_crab_lib::raw_ptr::RawPtr;
 use board_crab_lib::search;
 use board_crab_lib::transpos;
 use board_crab_lib::thread_flag::ThreadFlag;
@@ -26,8 +25,8 @@ fn search_consistency_test() {
         }
 
         let board = fen::load_fen(cur_fen).unwrap();
-        let best_move_a = search::search(&board, &RawPtr::new(&mut table), MAX_DEPTH - 1, None, None, None).1.root_best_move_idx;
-        let best_move_b = search::search(&board, &RawPtr::new(&mut table), MAX_DEPTH, None, None, None).1.root_best_move_idx;
+        let best_move_a = search::search(&board, &mut table, MAX_DEPTH - 1, None, None, None).1.root_best_move_idx;
+        let best_move_b = search::search(&board, &mut table, MAX_DEPTH, None, None, None).1.root_best_move_idx;
 
         if best_move_a == best_move_b {
             total_move_matches += 1;
