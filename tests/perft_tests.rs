@@ -31,6 +31,7 @@ fn depth_1_perft_test() {
         ("bishop-pin passant (illegal)", "8/2k5/5K2/3pP3/8/2b5/8/8 w - d6 0 2", 7),
         ("rook-pin passant (illegal)", "8/2k5/8/1r1pPK2/8/8/8/8 w - d6 0 2", 7),
         ("almost-rook-pin passant (legal)", "8/2k5/8/rn1pPK2/8/8/8/8 w - d6 0 2", 8),
+        ("en passant check capture", "8/6k1/6p1/4NpPp/3PK2P/1r2P3/1br5/4RR2 w - f6 0 33", 5),
 
         ("single check 1", "1k6/ppp3r1/8/8/4P1K1/1P1P1N2/PBP5/8 w - - 0 1", 7),
 

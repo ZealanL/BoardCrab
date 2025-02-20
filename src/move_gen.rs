@@ -255,7 +255,16 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                     tos &= lookup_gen::get_ray_mask(bm_to_idx(king), idx);
                 }
 
-                tos &= move_mask;
+                if board.en_passant_mask != 0 && piece_idx == PIECE_PAWN && board.checkers != 0
+                    && (board.checkers == bm_shift(board.en_passant_mask, 0, -pawn_advance_dy)) {
+                    // Check for the very special case where we can capture on en passant to stop check
+                    // (See: "8/6k1/6p1/4NpPp/3PK2P/1r2P3/1br5/4RR2 w - f6 0 33")
+                    tos &= move_mask | board.en_passant_mask;
+                } else {
+                    // Crop tos to the move mask
+                    // E.g. will require pieces to block checks/capture checkers
+                    tos &= move_mask;
+                }
             }
 
             for to in bm_iter_bits(tos) {
