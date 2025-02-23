@@ -20,3 +20,6 @@ ___*
 /.idea
 *.log
 *.bin
+*.book
+/board_crab_py/.github
+*.pyc
