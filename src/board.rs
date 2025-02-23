@@ -1,6 +1,6 @@
 use std::fmt::Write;
 use crate::bitmask::*;
-use crate::lookup_gen;
+use crate::{fen, lookup_gen};
 use crate::move_gen;
 use crate::zobrist;
 
@@ -360,6 +360,7 @@ impl std::fmt::Display for Board {
 
         let mut stream: String = String::new();
         writeln!(stream, "Board {{")?;
+        writeln!(stream, "\tFEN: {}", fen::make_fen(self))?;
         writeln!(stream, "\tTurn: {}", self.turn_idx)?;
         writeln!(stream, "\tOccupancy[0/1]: {}/{}", self.occupancy[0], self.occupancy[1])?;
         writeln!(stream, "\tCheckers: {}", self.checkers)?;
