@@ -46,9 +46,32 @@ pub fn print_best_move(best_move: Move) {
     println!("bestmove {}", best_move);
 }
 
-pub fn cmd_position(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
+// Just returns an Option<String> of the error
+macro_rules! cmd_err {
+    ($($x:expr),*) => {
+        Some(format!($($x),*))
+    };
+}
+
+fn cmd_uci(_parts: &Vec<String>, _engine: &mut AsyncEngine) -> Option<String> {
+    println!("id name BoardCrab v{}", env!("CARGO_PKG_VERSION"));
+    println!("id author ZealanL");
+    println!("uciok");
+    None
+}
+
+fn cmd_isready(_parts: &Vec<String>, _engine: &mut AsyncEngine) -> Option<String> {
+    println!("readyok");
+    None
+}
+
+fn cmd_quit(_parts: &Vec<String>, _engine: &mut AsyncEngine) -> Option<String> {
+    std::process::exit(0)
+}
+
+fn cmd_position(parts: &Vec<String>, engine: &mut AsyncEngine) -> Option<String> {
     if parts.len() < 2 {
-        panic!("\"position\" called with too few arguments")
+        cmd_err!("Too few arguments");
     }
 
     let mut board;
@@ -62,19 +85,19 @@ pub fn cmd_position(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
         }
 
         if fen_part_amount == 0 {
-            panic!("\"position fen\" is missing actual fen");
+            return cmd_err!("FEN missing");
         }
 
         let new_board_result = fen::load_fen_from_parts(&parts[2..(2 + fen_part_amount)].to_vec());
         if new_board_result.is_err() {
-            panic!("{}", new_board_result.unwrap_err());
+            return cmd_err!("Invalid FEN: {}", new_board_result.err().unwrap());
         } else {
             board = new_board_result.unwrap();
         }
     } else if parts[1] == "startpos" {
         board = Board::start_pos();
     } else {
-        panic!("Unknown position type \"{}\"", parts[1]);
+        return cmd_err!("Unknown position type \"{}\"", parts[1]);
     }
 
     if cur_part_idx < parts.len() {
@@ -95,19 +118,19 @@ pub fn cmd_position(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
                 }
 
                 if !move_found {
-                    panic!("Invalid move \"{}\" for position \"{}\"", move_str, fen::make_fen(&board));
+                    return cmd_err!("Invalid move \"{}\" for position \"{}\"", move_str, fen::make_fen(&board));
                 }
             }
         } else {
-            panic!("Unknown position suffix \"{}\"", parts[cur_part_idx]);
+            return cmd_err!("Unknown position suffix \"{}\"", parts[cur_part_idx]);
         }
     }
 
     engine.set_board(&board);
-    true
+    None
 }
 
-pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
+fn cmd_go(parts: &Vec<String>, engine: &mut AsyncEngine) -> Option<String> {
     let board = engine.get_board();
 
     let mut pairs = Vec::new();
@@ -148,7 +171,7 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
             }
             "perft" => {
                 search::perft(engine.get_board(), pair.1 as u8, true);
-                return true
+                return None;
             }
             _ => {
                 if first_arg == remaining_time_str {
@@ -162,10 +185,20 @@ pub fn cmd_go(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
     }
 
     engine.start_search(max_depth, Some(time_state));
-    true
+    None
 }
 
-pub fn cmd_ratemoves(engine: &mut AsyncEngine) -> bool {
+fn cmd_stop(_parts: &Vec<String>, engine: &mut AsyncEngine) -> Option<String> {
+    engine.stop_search();
+    None
+}
+
+fn cmd_eval(_parts: &Vec<String>, engine: &mut AsyncEngine) -> Option<String> {
+    print_eval(engine.get_board());
+    None
+}
+
+fn cmd_ratemoves(_parts: &Vec<String>, engine: &mut AsyncEngine) -> Option<String> {
     let mut moves_buf = move_gen::MoveBuffer::new();
     move_gen::generate_moves(engine.get_board(), &mut moves_buf);
 
@@ -183,50 +216,45 @@ pub fn cmd_ratemoves(engine: &mut AsyncEngine) -> bool {
         println!("\t{}: {}", mv, eval_move(engine.get_board(), &mv));
     }
 
-    true
+    None
 }
 
+fn cmd_d(_parts: &Vec<String>, engine: &mut AsyncEngine) -> Option<String> {
+    println!("{}", engine.get_board());
+    None
+}
+
+const CMD_FNS: [(fn(&Vec<String>, &mut AsyncEngine) -> Option<String>, &str); 9] = [
+    (cmd_uci, "uci"),
+    (cmd_isready, "isready"),
+    (cmd_quit, "quit"),
+    (cmd_position, "position"),
+    (cmd_go, "go"),
+    (cmd_stop, "stop"),
+    (cmd_eval, "eval"),
+    (cmd_ratemoves, "ratemoves"),
+    (cmd_d, "d")
+];
+
 // Returns true if the command was understood and processed correctly
-pub fn process_cmd(parts: Vec<String>, engine: &mut AsyncEngine) -> bool {
+pub fn process_cmd(line_str: String, engine: &mut AsyncEngine) -> bool {
+    let parts: Vec<String> = line_str.trim().split_whitespace().map(|v| v.to_string()).collect();
     if parts.is_empty() {
         return false;
     }
 
-    match parts[0].as_str() {
-
-        "uci" => {
-            println!("id name BoardCrab v{}", env!("CARGO_PKG_VERSION"));
-            println!("id author ZealanL");
-            println!("uciok");
-            true
-        },
-        "isready" => {
-            println!("readyok");
-            true
-        }
-        "quit" => {
-            std::process::exit(0);
-        }
-        "position" => cmd_position(parts, engine),
-        "go" => cmd_go(parts, engine),
-        "eval" => {
-            print_eval(engine.get_board());
-            true
-        },
-        "ratemoves" => cmd_ratemoves(engine),
-        "stop" => {
-            engine.stop_search();
-            true
-        }
-        "d" => {
-            // Display
-            println!("{}", engine.get_board());
-            true
-        }
-
-        _ => {
-            println!("info string Unknown command \"{}\"", parts[0]);
-            false
+    for (func, cmd_name) in CMD_FNS {
+        if parts[0] == cmd_name {
+            let cmd_err = func(&parts, engine);
+            if cmd_err.is_some() {
+                println!("info string Error: {}", cmd_err.unwrap());
+                return false;
+            } else {
+                return true;
+            }
         }
     }
+
+    println!("info string Unknown command \"{}\"", parts[0]);
+    false
 }

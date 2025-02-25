@@ -19,7 +19,6 @@ fn main() {
     loop {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
-        let cmd_parts: Vec<String> = input.trim().split_whitespace().map(|v| v.to_string()).collect();
-        uci::process_cmd(cmd_parts, &mut engine);
+        uci::process_cmd(input, &mut engine);
     }
 }
