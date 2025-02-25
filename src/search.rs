@@ -156,7 +156,6 @@ fn _search(
     }
 
     // Null move pruning
-    // https://www.chessprogramming.org/Null_Move_Pruning
     if cur_eval >= upper_bound &&
         board.checkers == 0 &&
         depth_remaining >= 1 &&
@@ -165,6 +164,7 @@ fn _search(
         let king_and_pawn = board.pieces[board.turn_idx][PIECE_PAWN] | board.pieces[board.turn_idx][PIECE_KING];
         let is_king_and_pawn = board.occupancy[board.turn_idx] == king_and_pawn;
         if !is_king_and_pawn {
+
             let mut next_board = board.clone();
             next_board.do_null_move();
 
@@ -212,10 +212,8 @@ fn _search(
         let mv = moves[i];
         let is_quiet = mv.is_quiet();
 
-        if in_extension {
-            if is_quiet {
-                continue // Only captures allowed in extensions
-            }
+        if in_extension && is_quiet {
+            continue // Only loud moves allowed in extensions
         }
 
         let mut move_eval = eval_move(board, &mv);
@@ -259,26 +257,22 @@ fn _search(
     let mut best_move_idx: usize = 0;
     for i in 0..rated_moves.len() {
         let move_idx = rated_moves[i].idx;
-        let move_eval = rated_moves[i].eval;
         let mv = &moves[move_idx];
 
         let mut next_board: Board = board.clone();
         next_board.do_move(mv);
 
         let gives_check = next_board.checkers != 0;
-        let is_quiet_not_check = mv.is_quiet() && !gives_check;
-
         let mut depth_reduction: u8 = 1;
 
-        if is_quiet_not_check {
-            // Late move reduction
-            if depth_elapsed >= 3 && i >= 1 {
-                let reduction_frac = (((i + 1) as f32) / (rated_moves.len() as f32)).sqrt();
-                let reduction_amount = reduction_frac * (depth_remaining as f32) * 0.5;
+        if gives_check {
+            depth_reduction = 0; // Extend after a check
+        } else {
+            // Late move reductions
+            if i >= 1 && depth_elapsed >= 2 {
+                let reduction_amount = (i as f32) * 0.1 + (depth_remaining as f32) * 0.2;
                 depth_reduction += reduction_amount.round() as u8;
             }
-        } else if gives_check {
-            depth_reduction = 0; // Extend after a check
         }
 
         // Prevent depth reduction overflow
@@ -286,7 +280,6 @@ fn _search(
 
         let mut next_eval: Value;
         loop {
-
             let next_lower_bound;
             if depth_reduction > 1 {
                 // Search with a null window
@@ -370,7 +363,7 @@ pub fn search(
     let mut search_info = SearchInfo::new();
 
     if depth >= 4 {
-        // Use a growing aspiration window
+        // Use an aspiration window
         const WINDOW_RANGE_GUESS: Value = 0.3; // Range of the window if there is a guessed eval
         const WINDOW_RANGE_NO_GUESS: Value = 1.0; // Range of the window if there isn't guessed eval
         let window_start_center = if guessed_eval.is_some() { guessed_eval.unwrap() } else { eval_board(board) };
