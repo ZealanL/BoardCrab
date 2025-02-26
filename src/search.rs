@@ -1,11 +1,11 @@
-use std::collections::HashSet;
 use crate::bitmask::*;
 use crate::board::*;
 use crate::eval::*;
 use crate::move_gen;
-use crate::zobrist::Hash;
-use crate::transpos;
 use crate::thread_flag::ThreadFlag;
+use crate::transpos;
+use crate::zobrist::Hash;
+use std::collections::HashSet;
 
 fn _perft(board: &Board, depth: u8, depth_elapsed: usize, print: bool) -> usize {
     let mut moves = move_gen::MoveBuffer::new();
@@ -41,12 +41,18 @@ fn _perft(board: &Board, depth: u8, depth_elapsed: usize, print: bool) -> usize 
     }
 }
 
-pub fn perft(board: &Board, depth: u8, print: bool) -> usize { _perft(board, depth, 0, print) }
+pub fn perft(board: &Board, depth: u8, print: bool) -> usize {
+    _perft(board, depth, 0, print)
+}
 
 //////////////////////////////////////////////////////////////////////////
 
 fn get_no_moves_eval(board: &Board) -> Value {
-    if board.checkers != 0 { -VALUE_CHECKMATE } else { 0.0 }
+    if board.checkers != 0 {
+        -VALUE_CHECKMATE
+    } else {
+        0.0
+    }
 }
 
 pub struct SearchInfo {
@@ -55,7 +61,7 @@ pub struct SearchInfo {
 
     // See https://www.chessprogramming.org/History_Heuristic
     pub history_values: [[[Value; 64]; NUM_PIECES]; 2],
-    pub root_best_move_idx: u8
+    pub root_best_move_idx: u8,
 }
 
 impl SearchInfo {
@@ -64,24 +70,31 @@ impl SearchInfo {
             total_nodes: 0,
             depth_hashes: [0; 256],
             history_values: [[[0.0; 64]; NUM_PIECES]; 2],
-            root_best_move_idx: 0
+            root_best_move_idx: 0,
         }
     }
 }
 
 fn _search(
-    board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
-    mut lower_bound: Value, upper_bound: Value,
-    depth_remaining: u8, depth_elapsed: i64,
-    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> Value {
-
+    board: &Board,
+    table: &mut transpos::Table,
+    search_info: &mut SearchInfo,
+    mut lower_bound: Value,
+    upper_bound: Value,
+    depth_remaining: u8,
+    depth_elapsed: i64,
+    stop_flag: Option<&ThreadFlag>,
+    stop_time: Option<std::time::Instant>,
+) -> Value {
     search_info.total_nodes += 1;
 
     let in_extension = depth_remaining == 0;
 
     // Check draw by repetition
     for i in (4..12).step_by(2) {
-        if (depth_elapsed >= i) && search_info.depth_hashes[(depth_elapsed - i) as usize] == board.hash {
+        if (depth_elapsed >= i)
+            && search_info.depth_hashes[(depth_elapsed - i) as usize] == board.hash
+        {
             // Loop detected
             return 0.0;
         } else {
@@ -90,7 +103,8 @@ fn _search(
     }
     search_info.depth_hashes[depth_elapsed as usize] = board.hash;
 
-    if depth_remaining >= 3 { // No point in checking at a super low depth
+    if depth_remaining >= 3 {
+        // No point in checking at a super low depth
         let mut stop = false;
 
         if stop_flag.is_some() && stop_flag.unwrap().get() {
@@ -132,19 +146,22 @@ fn _search(
                     if table_entry.eval <= lower_bound {
                         return table_entry.eval;
                     }
-                },
+                }
                 transpos::EntryType::FailHigh => {
                     if table_entry.eval >= upper_bound {
                         // Exceeds our upper bound, do a cutoff
                         return table_entry.eval;
                     }
-                },
+                }
                 transpos::EntryType::Exact => {
                     // Exact node, no further searching is needed
                     return table_entry.eval;
-                },
+                }
                 _ => {
-                    panic!("Invalid or unsupported entry type: {}", table_entry.entry_type as usize);
+                    panic!(
+                        "Invalid or unsupported entry type: {}",
+                        table_entry.entry_type as usize
+                    );
                 }
             }
         } else {
@@ -156,24 +173,26 @@ fn _search(
     }
 
     // Null move pruning
-    if cur_eval >= upper_bound &&
-        board.checkers == 0 &&
-        depth_remaining >= 1 &&
-        depth_elapsed >= 2
+    if cur_eval >= upper_bound && board.checkers == 0 && depth_remaining >= 1 && depth_elapsed >= 2
     {
-        let king_and_pawn = board.pieces[board.turn_idx][PIECE_PAWN] | board.pieces[board.turn_idx][PIECE_KING];
+        let king_and_pawn =
+            board.pieces[board.turn_idx][PIECE_PAWN] | board.pieces[board.turn_idx][PIECE_KING];
         let is_king_and_pawn = board.occupancy[board.turn_idx] == king_and_pawn;
         if !is_king_and_pawn {
-
             let mut next_board = board.clone();
             next_board.do_null_move();
 
             let next_depth = depth_remaining / 2;
             let next_result = _search(
-                &next_board, table, search_info,
-                -upper_bound, -upper_bound + 0.01,
-                next_depth, depth_elapsed + 1,
-                stop_flag, stop_time
+                &next_board,
+                table,
+                search_info,
+                -upper_bound,
+                -upper_bound + 0.01,
+                next_depth,
+                depth_elapsed + 1,
+                stop_flag,
+                stop_time,
             );
 
             let next_eval = decay_eval(-next_result);
@@ -192,7 +211,7 @@ fn _search(
     #[derive(Copy, Clone)]
     struct RatedMove {
         idx: usize,
-        eval: Value
+        eval: Value,
     }
 
     let table_best_move_idx;
@@ -213,13 +232,14 @@ fn _search(
         let is_quiet = mv.is_quiet();
 
         if in_extension && is_quiet {
-            continue // Only loud moves allowed in extensions
+            continue; // Only loud moves allowed in extensions
         }
 
         let mut move_eval = eval_move(board, &mv);
 
         if is_quiet {
-            let history_value = search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)];
+            let history_value =
+                search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)];
             move_eval += history_value * 0.02;
         }
 
@@ -227,12 +247,10 @@ fn _search(
             move_eval = Value::MAX;
         }
 
-        rated_moves.push(
-            RatedMove {
-                idx: i,
-                eval: move_eval
-            }
-        )
+        rated_moves.push(RatedMove {
+            idx: i,
+            eval: move_eval,
+        })
     }
 
     // Insertion sort
@@ -247,7 +265,7 @@ fn _search(
                 rated_moves[j - 1] = cur;
                 rated_moves[j] = prev;
             } else {
-                break
+                break;
             }
 
             j -= 1;
@@ -289,10 +307,15 @@ fn _search(
             }
 
             next_eval = _search(
-                &next_board, table, search_info,
-                next_lower_bound, -lower_bound,
-                depth_remaining - depth_reduction, depth_elapsed + 1,
-                stop_flag, stop_time
+                &next_board,
+                table,
+                search_info,
+                next_lower_bound,
+                -lower_bound,
+                depth_remaining - depth_reduction,
+                depth_elapsed + 1,
+                stop_flag,
+                stop_time,
             );
 
             if next_eval.is_infinite() {
@@ -304,7 +327,7 @@ fn _search(
             if depth_reduction > 1 && next_eval > lower_bound {
                 // Exceeded lower bound, we need to do a full search
                 depth_reduction = 1;
-                continue
+                continue;
             }
 
             break;
@@ -322,21 +345,26 @@ fn _search(
                 if mv.is_quiet() {
                     // Higher depth means better search and thus better quality info on how good this move is
                     let history_weight = 1.0 / (depth_elapsed as Value);
-                    search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)] += history_weight;
+                    search_info.history_values[board.turn_idx][mv.from_piece_idx]
+                        [bm_to_idx(mv.to)] += history_weight;
 
                     // Penalize all the moves we already searched
                     for j in 0..i {
                         let omv = &moves[rated_moves[j].idx];
-                        search_info.history_values[board.turn_idx][omv.from_piece_idx][bm_to_idx(omv.to)] -= history_weight / (i as Value);
+                        search_info.history_values[board.turn_idx][omv.from_piece_idx]
+                            [bm_to_idx(omv.to)] -= history_weight / (i as Value);
                     }
                 }
-                break
+                break;
             }
         }
     }
 
     table.set(
-        board.hash, best_eval, best_move_idx as u8, depth_remaining,
+        board.hash,
+        best_eval,
+        best_move_idx as u8,
+        depth_remaining,
         {
             if best_eval >= upper_bound {
                 transpos::EntryType::FailHigh
@@ -345,7 +373,7 @@ fn _search(
             } else {
                 transpos::EntryType::Exact
             }
-        }
+        },
     );
 
     if depth_elapsed == 0 {
@@ -356,17 +384,24 @@ fn _search(
 }
 
 pub fn search(
-    board: &Board, table: &mut transpos::Table, depth: u8,
+    board: &Board,
+    table: &mut transpos::Table,
+    depth: u8,
     guessed_eval: Option<Value>,
-    stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (Value, SearchInfo) {
-
+    stop_flag: Option<&ThreadFlag>,
+    stop_time: Option<std::time::Instant>,
+) -> (Value, SearchInfo) {
     let mut search_info = SearchInfo::new();
 
     if depth >= 4 {
         // Use an aspiration window
         const WINDOW_RANGE_GUESS: Value = 0.3; // Range of the window if there is a guessed eval
         const WINDOW_RANGE_NO_GUESS: Value = 1.0; // Range of the window if there isn't guessed eval
-        let window_start_center = if guessed_eval.is_some() { guessed_eval.unwrap() } else { eval_board(board) };
+        let window_start_center = if guessed_eval.is_some() {
+            guessed_eval.unwrap()
+        } else {
+            eval_board(board)
+        };
 
         let mut window_min = window_start_center;
         let mut window_max = window_start_center;
@@ -380,7 +415,15 @@ pub fn search(
         }
 
         let eval = _search(
-            board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+            board,
+            table,
+            &mut search_info,
+            window_min,
+            window_max,
+            depth,
+            0,
+            stop_flag,
+            stop_time,
         );
 
         if eval >= window_min && eval < window_max {
@@ -390,7 +433,15 @@ pub fn search(
     }
 
     let search_result = _search(
-        board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+        board,
+        table,
+        &mut search_info,
+        -VALUE_CHECKMATE,
+        VALUE_CHECKMATE,
+        depth,
+        0,
+        stop_flag,
+        stop_time,
     );
 
     (search_result, search_info)
@@ -401,7 +452,6 @@ pub fn determine_pv(mut board: Board, table: &transpos::Table) -> Vec<Move> {
     let mut found_hashes = HashSet::<Hash>::new();
 
     loop {
-
         let entry = table.get_fast(board.hash);
 
         let valid;

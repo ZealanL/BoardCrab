@@ -43,10 +43,10 @@ fn init_at_pos(x: i64, y: i64) {
     let idx = (x + y * 8) as usize;
 
     // Make knight moves
-    for cx in x-2..x+3 {
-        for cy in y-2..y+3 {
+    for cx in x - 2..x + 3 {
+        for cy in y - 2..y + 3 {
             if !is_inside_board(cx, cy) {
-                continue
+                continue;
             }
 
             if cx == x || cy == y {
@@ -71,9 +71,9 @@ fn init_at_pos(x: i64, y: i64) {
     // Make bishop moves
     let mut bishop_moves: BitMask = 0;
     bishop_moves |= make_ray(x, y, -1, -1, 0);
-    bishop_moves |= make_ray(x, y, -1,  1, 0);
-    bishop_moves |= make_ray(x, y,  1, -1, 0);
-    bishop_moves |= make_ray(x, y,  1,  1, 0);
+    bishop_moves |= make_ray(x, y, -1, 1, 0);
+    bishop_moves |= make_ray(x, y, 1, -1, 0);
+    bishop_moves |= make_ray(x, y, 1, 1, 0);
     unsafe {
         LT_BISHOP_MOVE[idx] = bishop_moves & !bm_from_xy(x, y);
     }
@@ -84,10 +84,10 @@ fn init_at_pos(x: i64, y: i64) {
     }
 
     // Make king moves
-    for cx in x-1..x+2 {
-        for cy in y-1..y+2 {
+    for cx in x - 1..x + 2 {
+        for cy in y - 1..y + 2 {
             if !is_inside_board(cx, cy) {
-                continue
+                continue;
             }
 
             if cx == x && cy == y {
@@ -108,8 +108,8 @@ fn init_at_pos(x: i64, y: i64) {
             let eidx = (ex + ey * 8) as usize;
 
             // Make sure these masks always give the start and end points properly
-            unsafe{ LT_BETWEEN_INCLUSIVE[idx][eidx] |= bm_from_xy(x, y) | bm_from_xy(ex, ey) };
-            unsafe{ LT_RAY[idx][eidx] |= bm_from_xy(x, y) };
+            unsafe { LT_BETWEEN_INCLUSIVE[idx][eidx] |= bm_from_xy(x, y) | bm_from_xy(ex, ey) };
+            unsafe { LT_RAY[idx][eidx] |= bm_from_xy(x, y) };
 
             let dx = ex - x;
             let dy = ey - y;
@@ -129,10 +129,14 @@ fn init_at_pos(x: i64, y: i64) {
             mask |= make_ray(x, y, dir_x, dir_y, 0);
             mask &= !make_ray(ex, ey, dir_x, dir_y, 0); // Remove bits starting from the endpoint
 
-            unsafe{ LT_BETWEEN_INCLUSIVE[idx][eidx] |= mask };
-            unsafe{ LT_BETWEEN_EXCLUSIVE[idx][eidx] = mask & !bm_from_xy(x, y) & !bm_from_xy(ex, ey); };
+            unsafe { LT_BETWEEN_INCLUSIVE[idx][eidx] |= mask };
+            unsafe {
+                LT_BETWEEN_EXCLUSIVE[idx][eidx] = mask & !bm_from_xy(x, y) & !bm_from_xy(ex, ey);
+            };
 
-            unsafe{ LT_RAY[idx][eidx] = make_ray(x, y, dir_x, dir_y, 0); };
+            unsafe {
+                LT_RAY[idx][eidx] = make_ray(x, y, dir_x, dir_y, 0);
+            };
         }
     }
 }
@@ -145,7 +149,7 @@ pub fn walk_in_dir<const SHIFT: i64>(start: BitMask, inv_occ: BitMask) -> BitMas
         // Needs clamping since we are moving horizontally
         let clamp_area: BitMask = match SHIFT {
             1 | 9 | -7 => bm_make_column(7),
-            _ => bm_make_column(0)
+            _ => bm_make_column(0),
         };
 
         mask = (inv_occ | start) & !clamp_area;
@@ -165,7 +169,10 @@ pub fn walk_in_dir<const SHIFT: i64>(start: BitMask, inv_occ: BitMask) -> BitMas
 }
 
 // TODO: Move this stuff to move_gen maybe?
-fn generate_slider_tos_slow<const ROOK: bool, const BISHOP: bool>(piece_pos: BitMask, occupy: BitMask) -> BitMask {
+fn generate_slider_tos_slow<const ROOK: bool, const BISHOP: bool>(
+    piece_pos: BitMask,
+    occupy: BitMask,
+) -> BitMask {
     // TODO: This is very slow
     let inv_occ = !occupy;
 
@@ -173,21 +180,20 @@ fn generate_slider_tos_slow<const ROOK: bool, const BISHOP: bool>(piece_pos: Bit
 
     if ROOK {
         attack |= walk_in_dir::<-1>(piece_pos, inv_occ);
-        attack |= walk_in_dir::< 1>(piece_pos, inv_occ);
+        attack |= walk_in_dir::<1>(piece_pos, inv_occ);
         attack |= walk_in_dir::<-8>(piece_pos, inv_occ);
-        attack |= walk_in_dir::< 8>(piece_pos, inv_occ);
+        attack |= walk_in_dir::<8>(piece_pos, inv_occ);
     }
 
     if BISHOP {
         attack |= walk_in_dir::<-7>(piece_pos, inv_occ);
-        attack |= walk_in_dir::< 7>(piece_pos, inv_occ);
+        attack |= walk_in_dir::<7>(piece_pos, inv_occ);
         attack |= walk_in_dir::<-9>(piece_pos, inv_occ);
-        attack |= walk_in_dir::< 9>(piece_pos, inv_occ);
+        attack |= walk_in_dir::<9>(piece_pos, inv_occ);
     }
 
     attack & !piece_pos
 }
-
 
 pub fn get_piece_base_tos(piece_idx: usize, pos_idx: usize) -> BitMask {
     match piece_idx {
@@ -196,7 +202,7 @@ pub fn get_piece_base_tos(piece_idx: usize, pos_idx: usize) -> BitMask {
         PIECE_ROOK => unsafe { LT_ROOK_MOVE[pos_idx] },
         PIECE_QUEEN => unsafe { LT_QUEEN_MOVE[pos_idx] },
         PIECE_KING => unsafe { LT_KING_MOVE[pos_idx] },
-        _ => 0
+        _ => 0,
     }
 }
 
@@ -215,14 +221,22 @@ pub fn get_slider_tos_fast(piece_idx: usize, piece_pos_idx: usize, occupy: BitMa
     match piece_idx {
         PIECE_BISHOP => lookup_gen_magic::get_bishop_moves(piece_pos_idx, occupy),
         PIECE_ROOK => lookup_gen_magic::get_rook_moves(piece_pos_idx, occupy),
-        PIECE_QUEEN => lookup_gen_magic::get_bishop_moves(piece_pos_idx, occupy) | lookup_gen_magic::get_rook_moves(piece_pos_idx, occupy),
+        PIECE_QUEEN => {
+            lookup_gen_magic::get_bishop_moves(piece_pos_idx, occupy)
+                | lookup_gen_magic::get_rook_moves(piece_pos_idx, occupy)
+        }
         _ => {
             panic!("Piece is not a slider")
         }
     }
 }
 
-pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize, occupy: BitMask) -> BitMask {
+pub fn get_piece_tos(
+    piece_idx: usize,
+    piece_pos: BitMask,
+    piece_pos_idx: usize,
+    occupy: BitMask,
+) -> BitMask {
     let occupy = occupy & !piece_pos;
 
     match piece_idx {
@@ -231,12 +245,12 @@ pub fn get_piece_tos(piece_idx: usize, piece_pos: BitMask, piece_pos_idx: usize,
             return get_slider_tos_fast(piece_idx, piece_pos_idx, occupy);
             #[cfg(debug_assertions)]
             get_slider_tos_slow(piece_idx, piece_pos_idx, occupy)
-        },
-        _ => { // Non-sliding
+        }
+        _ => {
+            // Non-sliding
             get_piece_base_tos(piece_idx, piece_pos_idx)
-        },
+        }
     }
-
 }
 pub fn get_between_mask_exclusive(idx_a: usize, idx_b: usize) -> BitMask {
     unsafe { LT_BETWEEN_EXCLUSIVE[idx_a][idx_b] }

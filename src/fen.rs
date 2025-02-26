@@ -14,7 +14,7 @@ impl std::fmt::Display for FenError {
 
 // Based off of https://github.com/ZealanL/BoardMouse/blob/main/src/FEN/FEN.cpp
 pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
-    let throw_err = |msg: &str| ->Result<Board>{
+    let throw_err = |msg: &str| -> Result<Board> {
         let fen = fen_parts.join(" ");
         Err(FenError(format!("Invalid fen: \"{}\", {}", fen, msg)))?
     };
@@ -129,7 +129,10 @@ pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
                 } else if ch.eq_ignore_ascii_case(&'Q') {
                     board.castle_rights[team_idx][0] = true;
                 } else {
-                    throw_err(format!("invalid castle string \"{castle_str}\", bad char \'{ch}\'").as_str())?;
+                    throw_err(
+                        format!("invalid castle string \"{castle_str}\", bad char \'{ch}\'")
+                            .as_str(),
+                    )?;
                 }
             }
         }
@@ -142,7 +145,9 @@ pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
             // No en passant
         } else {
             if en_passant_str.len() != 2 {
-                throw_err(format!("invalid castle string \"{en_passant_str}\", bad length").as_str())?;
+                throw_err(
+                    format!("invalid castle string \"{en_passant_str}\", bad length").as_str(),
+                )?;
             }
 
             let pos = bm_from_coord(en_passant_str);
@@ -158,8 +163,10 @@ pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
     if fen_parts.len() >= 5 {
         let half_move_counter = &fen_parts[4];
         match half_move_counter.parse::<u8>() {
-            Ok(x) => { board.half_move_counter = x },
-            _ => { throw_err(format!("invalid half-move counter \"{half_move_counter}\"").as_str())?; }
+            Ok(x) => board.half_move_counter = x,
+            _ => {
+                throw_err(format!("invalid half-move counter \"{half_move_counter}\"").as_str())?;
+            }
         }
     }
 
@@ -172,7 +179,10 @@ pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
 }
 
 pub fn load_fen(fen: &str) -> Result<Board> {
-    let fen_parts = fen.split(" ").map(|v| v.to_string()).collect::<Vec<String>>();
+    let fen_parts = fen
+        .split(" ")
+        .map(|v| v.to_string())
+        .collect::<Vec<String>>();
     load_fen_from_parts(&fen_parts)
 }
 
@@ -184,13 +194,11 @@ pub fn make_fen(board: &Board) -> String {
 
     // Write position
     for y in (0..8).rev() {
-
         let mut empty_counter = 0;
 
         for x in 0..8 {
             let mask = bm_from_xy(x, y);
             if board.combined_occupancy() & mask != 0 {
-
                 // Piece on the square
                 if empty_counter > 0 {
                     write!(position_stream, "{empty_counter}").unwrap();
@@ -240,9 +248,15 @@ pub fn make_fen(board: &Board) -> String {
             if board.castle_rights[team_idx][side] {
                 let side_char = if side == 0 { 'Q' } else { 'K' };
                 write!(
-                    castle_rights_stream, "{}",
-                    if team_idx == 0 { side_char.to_ascii_uppercase() } else { side_char.to_ascii_lowercase() }
-                ).unwrap();
+                    castle_rights_stream,
+                    "{}",
+                    if team_idx == 0 {
+                        side_char.to_ascii_uppercase()
+                    } else {
+                        side_char.to_ascii_lowercase()
+                    }
+                )
+                .unwrap();
             }
         }
     }
@@ -266,7 +280,7 @@ pub fn make_fen(board: &Board) -> String {
     }
 
     write!(result, " {} {}", board.half_move_counter, 1).unwrap(); // Write half move and normal move counter
-    // TODO: Add actual move counter
+                                                                   // TODO: Add actual move counter
 
     result
 }

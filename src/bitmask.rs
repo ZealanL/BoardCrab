@@ -38,7 +38,12 @@ pub const fn bm_from_coord(coord_name: &str) -> BitMask {
 
 pub fn bm_to_coord(mask: BitMask) -> String {
     let (x, y) = bm_to_xy(mask);
-    [(x + ('a' as i64)) as u8 as char, (y + ('1' as i64)) as u8 as char].iter().collect()
+    [
+        (x + ('a' as i64)) as u8 as char,
+        (y + ('1' as i64)) as u8 as char,
+    ]
+    .iter()
+    .collect()
 }
 
 pub const fn bm_get(mask: BitMask, x: i64, y: i64) -> bool {
@@ -84,11 +89,13 @@ pub const fn bm_flip_vertical(mask: BitMask) -> BitMask {
 
 // Iterate over the bits in a mask
 pub struct ItrBits {
-    remaining_mask: BitMask
+    remaining_mask: BitMask,
 }
 
 pub fn bm_iter_bits(mask: BitMask) -> ItrBits {
-    ItrBits{ remaining_mask: mask }
+    ItrBits {
+        remaining_mask: mask,
+    }
 }
 
 impl Iterator for ItrBits {

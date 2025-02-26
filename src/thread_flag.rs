@@ -1,17 +1,17 @@
-use std::sync::Arc;
 use std::sync::atomic;
+use std::sync::Arc;
 
 // A flag that can be triggered from a thread to notify another thread
 // The bool starts as false
 #[derive(Debug, Clone)]
 pub struct ThreadFlag {
-    atomic_bool: Arc<atomic::AtomicBool>
+    atomic_bool: Arc<atomic::AtomicBool>,
 }
 
 impl ThreadFlag {
     pub fn new() -> ThreadFlag {
         ThreadFlag {
-            atomic_bool: Arc::new(atomic::AtomicBool::new(false))
+            atomic_bool: Arc::new(atomic::AtomicBool::new(false)),
         }
     }
 

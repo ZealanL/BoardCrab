@@ -1,7 +1,7 @@
-use rand::Rng;
 use board_crab_lib::board::*;
-use board_crab_lib::search;
 use board_crab_lib::move_gen;
+use board_crab_lib::search;
+use rand::Rng;
 extern crate rand;
 
 // Plays a bunch of random games and makes sure the board's persistent updates match manual full updates
@@ -37,7 +37,7 @@ fn continuity_test_1() {
             }
 
             if moves.is_empty() {
-                break
+                break;
             }
 
             // Play one of the moves
@@ -57,7 +57,6 @@ fn continuity_test_2() {
     for _i in 0..NUM_GAMES {
         let board = Board::start_pos();
         for _j in 0..MAX_MOVES_PER_GAME {
-
             let outer_perft = search::perft(&board, 2, false);
 
             let mut moves = move_gen::MoveBuffer::new();

@@ -1,12 +1,12 @@
-use crate::zobrist::*;
 use crate::eval::Value;
+use crate::zobrist::*;
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub enum EntryType {
     Invalid,
     Exact,
     FailLow,
-    FailHigh
+    FailHigh,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -17,7 +17,7 @@ pub struct Entry {
     pub depth_remaining: u8,
     pub entry_type: EntryType,
     pub age_count: u64,
-    pub checksum: u64
+    pub checksum: u64,
 }
 
 impl Entry {
@@ -29,7 +29,7 @@ impl Entry {
             depth_remaining: 0,
             entry_type: EntryType::Invalid,
             age_count: 0,
-            checksum: 0
+            checksum: 0,
         }
     }
 
@@ -88,7 +88,7 @@ impl Bucket {
 pub struct Table {
     buckets: Vec<Bucket>,
     age_count: u64,
-    size_mbs: usize
+    size_mbs: usize,
 }
 
 impl Table {
@@ -99,7 +99,7 @@ impl Table {
         Table {
             buckets,
             age_count: 0,
-            size_mbs
+            size_mbs,
         }
     }
 
@@ -107,7 +107,7 @@ impl Table {
         self.size_mbs
     }
 
-    pub fn is_any_entry_locked(&self) -> bool{
+    pub fn is_any_entry_locked(&self) -> bool {
         for bucket in &self.buckets {
             for entry in &bucket.entries {
                 if entry.is_set() && !entry.is_valid() {
@@ -159,7 +159,14 @@ impl Table {
         }
     }
 
-    pub fn set(&mut self, hash: Hash, eval: Value, best_move_idx: u8, depth_remaining: u8, entry_type: EntryType) {
+    pub fn set(
+        &mut self,
+        hash: Hash,
+        eval: Value,
+        best_move_idx: u8,
+        depth_remaining: u8,
+        entry_type: EntryType,
+    ) {
         let bucket_idx = self.get_bucket_idx(hash);
         let bucket = &mut self.buckets[bucket_idx];
 
@@ -189,7 +196,7 @@ impl Table {
             depth_remaining,
             entry_type,
             age_count: self.age_count,
-            checksum: 0
+            checksum: 0,
         };
         entry.update_checksum();
 

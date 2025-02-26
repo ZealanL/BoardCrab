@@ -6,7 +6,7 @@ pub const MAX_MOVES: usize = 256;
 
 pub struct MoveBuffer {
     data: [Move; MAX_MOVES],
-    size: usize
+    size: usize,
 }
 
 impl MoveBuffer {
@@ -14,17 +14,23 @@ impl MoveBuffer {
         #![allow(invalid_value)]
         MoveBuffer {
             data: unsafe { std::mem::MaybeUninit::uninit().assume_init() }, // Uninitialized
-            size: 0
+            size: 0,
         }
     }
 
-    pub fn len(&self) -> usize { self.size }
+    pub fn len(&self) -> usize {
+        self.size
+    }
 
-    pub fn is_empty(&self) -> bool { self.size == 0 }
+    pub fn is_empty(&self) -> bool {
+        self.size == 0
+    }
 
     pub fn push(&mut self, mv: Move) {
         if self.size >= MAX_MOVES {
-            panic!("Exceed maximum moves {MAX_MOVES} (this should never happen in a real position)");
+            panic!(
+                "Exceed maximum moves {MAX_MOVES} (this should never happen in a real position)"
+            );
         }
 
         self.data[self.size] = mv;
@@ -38,23 +44,27 @@ impl MoveBuffer {
     pub fn iter(&self) -> MoveBufferIterator<'_> {
         MoveBufferIterator {
             move_set: self,
-            index: 0
+            index: 0,
         }
     }
 }
 
 impl std::ops::Index<usize> for MoveBuffer {
     type Output = Move;
-    fn index(&self, i: usize) -> &Move { &self.data[i] }
+    fn index(&self, i: usize) -> &Move {
+        &self.data[i]
+    }
 }
 
 impl std::ops::IndexMut<usize> for MoveBuffer {
-    fn index_mut(&mut self, i: usize) -> &mut Move { &mut self.data[i] }
+    fn index_mut(&mut self, i: usize) -> &mut Move {
+        &mut self.data[i]
+    }
 }
 
 pub struct MoveBufferIterator<'a> {
     move_set: &'a MoveBuffer,
-    index: usize
+    index: usize,
 }
 
 impl<'a> Iterator for MoveBufferIterator<'a> {
@@ -74,10 +84,16 @@ impl<'a> Iterator for MoveBufferIterator<'a> {
 
 // Special check if an en passant capture would unpin a horizontal slider
 // Because en passant removes 2 pawns from the rank at the same time, it can bypass our pin checks
-fn is_en_passant_pinned_horizontal(pawn_from: BitMask, board: &Board, turn_idx: usize, pawn_advance_dy: i64) -> bool{
+fn is_en_passant_pinned_horizontal(
+    pawn_from: BitMask,
+    board: &Board,
+    turn_idx: usize,
+    pawn_advance_dy: i64,
+) -> bool {
     let rank_mask = bm_make_row(bm_to_xy(pawn_from).1);
 
-    let opp_horizontal_sliders = board.pieces[1 - turn_idx][PIECE_ROOK] | board.pieces[1 - turn_idx][PIECE_QUEEN];
+    let opp_horizontal_sliders =
+        board.pieces[1 - turn_idx][PIECE_ROOK] | board.pieces[1 - turn_idx][PIECE_QUEEN];
     if rank_mask & opp_horizontal_sliders != 0 {
         // There are horizontal sliders on the rank
         // It's important to do this check branched first, because the next checks will be much more expensive
@@ -110,10 +126,19 @@ fn generate_pawn_attacks_side<const SIDE: usize>(pawns: BitMask, pawn_advance_dy
     // Order is left,right
     const CAPTURE_MASK: [BitMask; 2] = [!bm_make_column(0), !bm_make_column(7)];
 
-    bm_shift(pawns & CAPTURE_MASK[SIDE], if SIDE == 0 { -1 } else { 1 }, pawn_advance_dy)
+    bm_shift(
+        pawns & CAPTURE_MASK[SIDE],
+        if SIDE == 0 { -1 } else { 1 },
+        pawn_advance_dy,
+    )
 }
 
-pub fn generate_attacks(board: &Board, team_idx: usize, piece_idx: usize, from: BitMask) -> BitMask {
+pub fn generate_attacks(
+    board: &Board,
+    team_idx: usize,
+    piece_idx: usize,
+    from: BitMask,
+) -> BitMask {
     let opp_king = board.pieces[1 - team_idx][PIECE_KING];
     let occ_for_attack = board.combined_occupancy() & !opp_king; // We want slider attacks to go through the king
 
@@ -122,7 +147,8 @@ pub fn generate_attacks(board: &Board, team_idx: usize, piece_idx: usize, from: 
     if piece_idx == PIECE_PAWN {
         // Just bitmask it
         let pawn_advance_dy = if team_idx == 0 { 1 } else { -1 };
-        let pawn_attacks = generate_pawn_attacks_side::<0>(from, pawn_advance_dy) |  generate_pawn_attacks_side::<1>(from, pawn_advance_dy);
+        let pawn_attacks = generate_pawn_attacks_side::<0>(from, pawn_advance_dy)
+            | generate_pawn_attacks_side::<1>(from, pawn_advance_dy);
         attacks |= pawn_attacks;
     } else {
         // TODO: We don't need to have lookup gen mask out our own team
@@ -139,34 +165,44 @@ pub fn can_castle(side: usize, board: &Board, team_idx: usize, is_in_check: bool
     // From: https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/Engine/MoveGen/MoveGen.cpp#L13
     // Ordering is [Left/Queen-side, Right/King-side]
     const CASTLE_EMPTY_MASKS: [[BitMask; 2]; 2] = [
-        [ // White
+        [
+            // White
             bm_from_coord("B1") | bm_from_coord("C1") | bm_from_coord("D1"),
-            bm_from_coord("F1") | bm_from_coord("G1")
+            bm_from_coord("F1") | bm_from_coord("G1"),
         ],
-
-        [ // Black
+        [
+            // Black
             bm_from_coord("B8") | bm_from_coord("C8") | bm_from_coord("D8"),
-            bm_from_coord("F8") | bm_from_coord("G8")
-        ]
+            bm_from_coord("F8") | bm_from_coord("G8"),
+        ],
     ];
 
     // These squares cannot be in attack from the enemy in order to castle
     const CASTLE_SAFETY_MASKS: [[BitMask; 2]; 2] = [
-        [ // White
+        [
+            // White
             bm_from_coord("C1") | bm_from_coord("D1"),
             bm_from_coord("F1") | bm_from_coord("G1"),
         ],
-
-        [ // Black
+        [
+            // Black
             bm_from_coord("C8") | bm_from_coord("D8"), // Far
             bm_from_coord("F8") | bm_from_coord("G8"), // Near
-        ]
+        ],
     ];
 
-    if !board.castle_rights[team_idx][side] { return false; }
-    if is_in_check { return false; }
-    if (board.combined_occupancy() & CASTLE_EMPTY_MASKS[team_idx][side]) != 0 { return false; }
-    if (board.attacks[1 - team_idx] & CASTLE_SAFETY_MASKS[team_idx][side]) != 0 { return false; }
+    if !board.castle_rights[team_idx][side] {
+        return false;
+    }
+    if is_in_check {
+        return false;
+    }
+    if (board.combined_occupancy() & CASTLE_EMPTY_MASKS[team_idx][side]) != 0 {
+        return false;
+    }
+    if (board.attacks[1 - team_idx] & CASTLE_SAFETY_MASKS[team_idx][side]) != 0 {
+        return false;
+    }
 
     true
 }
@@ -181,7 +217,8 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
     let move_mask: BitMask;
     if num_checkers == 1 {
         // Must block the check or capture the checker
-        move_mask = lookup_gen::get_between_mask_inclusive(bm_to_idx(king), bm_to_idx(board.checkers));
+        move_mask =
+            lookup_gen::get_between_mask_inclusive(bm_to_idx(king), bm_to_idx(board.checkers));
     } else {
         // No restrictions
         // (Double checks will be handled separately)
@@ -200,7 +237,6 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
             let idx = bm_to_idx(from);
             let mut tos: BitMask;
             if piece_idx == PIECE_PAWN {
-
                 // Single-move
                 tos = bm_shift(from, 0, pawn_advance_dy) & !occ_combined;
 
@@ -211,15 +247,16 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                 }
 
                 // Pawn attacks
-                let attack_tos =
-                    (generate_pawn_attacks_side::<0>(from, pawn_advance_dy) | generate_pawn_attacks_side::<1>(from, pawn_advance_dy))
-                        & (occ_opp | board.en_passant_mask);
+                let attack_tos = (generate_pawn_attacks_side::<0>(from, pawn_advance_dy)
+                    | generate_pawn_attacks_side::<1>(from, pawn_advance_dy))
+                    & (occ_opp | board.en_passant_mask);
 
                 tos |= attack_tos;
 
                 if attack_tos & board.en_passant_mask != 0 {
                     // Check annoying edge case to make sure en passant is actually legal
-                    if is_en_passant_pinned_horizontal(from, board, board.turn_idx, pawn_advance_dy) {
+                    if is_en_passant_pinned_horizontal(from, board, board.turn_idx, pawn_advance_dy)
+                    {
                         // En passant isn't legal!
                         tos &= !board.en_passant_mask;
                     }
@@ -240,14 +277,17 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                     if can_castle(castle_side, board, board.turn_idx, num_checkers != 0) {
                         out_move_set.push(Move {
                             from: king,
-                            to: if castle_side == 0 { bm_shift(king, -2, 0) } else { bm_shift(king, 2, 0) },
+                            to: if castle_side == 0 {
+                                bm_shift(king, -2, 0)
+                            } else {
+                                bm_shift(king, 2, 0)
+                            },
                             from_piece_idx: PIECE_KING,
                             to_piece_idx: PIECE_KING,
-                            flags: Move::FLAG_CASTLE
+                            flags: Move::FLAG_CASTLE,
                         });
                     }
                 }
-
             } else {
                 if (board.pinned[board.turn_idx] & from) != 0 {
                     // Restrict to the path following the inverse direction of the pin from the king
@@ -255,8 +295,11 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                     tos &= lookup_gen::get_ray_mask(bm_to_idx(king), idx);
                 }
 
-                if board.en_passant_mask != 0 && piece_idx == PIECE_PAWN && board.checkers != 0
-                    && (board.checkers == bm_shift(board.en_passant_mask, 0, -pawn_advance_dy)) {
+                if board.en_passant_mask != 0
+                    && piece_idx == PIECE_PAWN
+                    && board.checkers != 0
+                    && (board.checkers == bm_shift(board.en_passant_mask, 0, -pawn_advance_dy))
+                {
                     // Check for the very special case where we can capture on en passant to stop check
                     // (See: "8/6k1/6p1/4NpPp/3PK2P/1r2P3/1br5/4RR2 w - f6 0 33")
                     tos &= move_mask | board.en_passant_mask;
@@ -283,10 +326,10 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                                 to,
                                 from_piece_idx: PIECE_PAWN,
                                 to_piece_idx,
-                                flags: Move::FLAG_PROMOTION
+                                flags: Move::FLAG_PROMOTION,
                             });
                         }
-                        continue
+                        continue;
                     } else if (to & board.en_passant_mask) != 0 {
                         flags = Move::FLAG_EN_PASSANT | Move::FLAG_CAPTURE
                     } else if to == bm_shift(from, 0, pawn_advance_dy * 2) {
@@ -303,7 +346,7 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                     to,
                     from_piece_idx: piece_idx,
                     to_piece_idx: piece_idx,
-                    flags
+                    flags,
                 });
             }
         }

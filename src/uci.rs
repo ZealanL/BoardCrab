@@ -1,20 +1,22 @@
-use std::cmp::PartialEq;
+use crate::async_engine::AsyncEngine;
 use crate::board::*;
-use crate::move_gen;
-use crate::search;
 use crate::eval::*;
 use crate::fen;
+use crate::move_gen;
+use crate::search;
 use crate::search::SearchInfo;
-use crate::transpos;
-use crate::async_engine::AsyncEngine;
 use crate::time_manager::TimeState;
+use crate::transpos;
+use std::cmp::PartialEq;
 // Refs:
 // - https://gist.github.com/DOBRO/2592c6dad754ba67e6dcaec8c90165bf
 // - https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/UCI/UCI.cpp
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 enum UCIOptionType {
-    Int, Bool, Button
+    Int,
+    Bool,
+    Button,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -24,58 +26,68 @@ struct UCIOption {
     value: i64,
     value_min: i64,
     value_max: i64,
-    change_callback: Option<fn (&mut UCIState, i64)>
+    change_callback: Option<fn(&mut UCIState, i64)>,
 }
 
 impl UCIOption {
     const TYPE_NAMES: [&'static str; 3] = ["spin", "check", "button"];
 
-    pub fn new_int(name: &'static str, default: i64, value_min: i64, value_max: i64, change_callback: Option<fn (&mut UCIState, i64)>) -> UCIOption {
+    pub fn new_int(
+        name: &'static str,
+        default: i64,
+        value_min: i64,
+        value_max: i64,
+        change_callback: Option<fn(&mut UCIState, i64)>,
+    ) -> UCIOption {
         UCIOption {
             option_type: UCIOptionType::Int,
             name,
             value: default,
             value_min,
             value_max,
-            change_callback
+            change_callback,
         }
     }
 
-    pub fn new_button(name: &'static str, change_callback: fn (&mut UCIState, i64)) -> UCIOption {
+    pub fn new_button(name: &'static str, change_callback: fn(&mut UCIState, i64)) -> UCIOption {
         UCIOption {
             option_type: UCIOptionType::Button,
             name,
             value: 0,
             value_min: 0,
             value_max: 0,
-            change_callback: Some(change_callback)
+            change_callback: Some(change_callback),
         }
     }
 }
 
 pub struct UCIState {
     engine: AsyncEngine,
-    options: Vec<UCIOption>
+    options: Vec<UCIOption>,
 }
 
 impl UCIState {
     pub fn new() -> UCIState {
         const DEFAULT_TABLE_SIZE_MBS: usize = 100;
         let options = [
-            UCIOption::new_int("Threads",8, 1, 256, None),
-            UCIOption::new_int("Hash", DEFAULT_TABLE_SIZE_MBS as i64, 1, 65536,
+            UCIOption::new_int("Threads", 8, 1, 256, None),
+            UCIOption::new_int(
+                "Hash",
+                DEFAULT_TABLE_SIZE_MBS as i64,
+                1,
+                65536,
                 Some(|state: &mut UCIState, new_value: i64| {
                     state.engine.maybe_update_table_size(new_value as usize);
-                })
+                }),
             ),
             UCIOption::new_button("Clear Hash", |state: &mut UCIState, new_value: i64| {
-                 state.engine.reset_table();
+                state.engine.reset_table();
             }),
         ];
 
         let mut result = UCIState {
             engine: AsyncEngine::new(DEFAULT_TABLE_SIZE_MBS),
-            options: Vec::new()
+            options: Vec::new(),
         };
 
         for option in options.iter() {
@@ -98,7 +110,14 @@ impl UCIState {
 
 //////////////////////////
 
-pub fn print_search_results(board: &Board, table: &transpos::Table, depth: u8, eval: Value, search_info: &SearchInfo, elapsed_time: f64) {
+pub fn print_search_results(
+    board: &Board,
+    table: &transpos::Table,
+    depth: u8,
+    eval: Value,
+    search_info: &SearchInfo,
+    elapsed_time: f64,
+) {
     let mut moves = move_gen::MoveBuffer::new();
     move_gen::generate_moves(board, &mut moves);
 
@@ -145,15 +164,22 @@ fn cmd_uci(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     println!("id author ZealanL");
 
     for option in &state.options {
-        print!("option name {} type {}", option.name, UCIOption::TYPE_NAMES[option.option_type as usize]);
+        print!(
+            "option name {} type {}",
+            option.name,
+            UCIOption::TYPE_NAMES[option.option_type as usize]
+        );
 
         match option.option_type {
             UCIOptionType::Int => {
-                print!(" default {} min {} max {}", option.value, option.value_min, option.value_max);
-            },
+                print!(
+                    " default {} min {} max {}",
+                    option.value, option.value_min, option.value_max
+                );
+            }
             UCIOptionType::Bool => {
                 print!(" default {}", option.value > 0);
-            },
+            }
             UCIOptionType::Button => {}
         }
 
@@ -199,10 +225,9 @@ fn cmd_setoption(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
 
     for option in &mut state.options {
         if option.name.eq_ignore_ascii_case(&option_name) {
-
             let is_button = option.option_type == UCIOptionType::Button;
             if !is_button && new_value_str.is_empty() {
-                return cmd_err!("Value missing")
+                return cmd_err!("Value missing");
             }
 
             let new_value: i64 = match new_value_str.to_lowercase().as_str() {
@@ -227,14 +252,19 @@ fn cmd_setoption(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
             match option.option_type {
                 UCIOptionType::Int => {
                     if new_value < option.value_min || new_value > option.value_max {
-                        return cmd_err!("Invalid number value \"{}\", valid range is [{}-{}]", new_value, option.value_min, option.value_max);
+                        return cmd_err!(
+                            "Invalid number value \"{}\", valid range is [{}-{}]",
+                            new_value,
+                            option.value_min,
+                            option.value_max
+                        );
                     }
-                },
+                }
                 UCIOptionType::Bool => {
                     if new_value < 0 || new_value > 1 {
                         return cmd_err!("Invalid bool value: \"{}\", expected \"false\", \"true\", \"0\", or \"1\"", new_value_str);
                     }
-                },
+                }
                 UCIOptionType::Button => {
                     // Don't care
                 }
@@ -309,7 +339,11 @@ fn cmd_position(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
                 }
 
                 if !move_found {
-                    return cmd_err!("Invalid move \"{}\" for position \"{}\"", move_str, fen::make_fen(&board));
+                    return cmd_err!(
+                        "Invalid move \"{}\" for position \"{}\"",
+                        move_str,
+                        fen::make_fen(&board)
+                    );
                 }
             }
         } else {
@@ -331,9 +365,7 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
         let parse_result = parts[usize::min(i + 1, parts.len() - 1)].parse::<i64>();
         if parse_result.is_ok() {
             // Argument with number val
-            pairs.push(
-                (parts[i].clone(), parse_result.unwrap())
-            );
+            pairs.push((parts[i].clone(), parse_result.unwrap()));
             i += 2;
         } else {
             // Alone argument
@@ -345,7 +377,11 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     let mut max_depth: u8 = u8::MAX;
     let mut time_state: TimeState = TimeState::new();
 
-    let remaining_time_str = if board.turn_idx == 0 { "wtime" } else { "btime" };
+    let remaining_time_str = if board.turn_idx == 0 {
+        "wtime"
+    } else {
+        "btime"
+    };
     let time_inc_str = if board.turn_idx == 0 { "winc" } else { "binc" };
 
     for pair in pairs {
@@ -353,7 +389,7 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
         match first_arg {
             "depth" => {
                 max_depth = pair.1 as u8;
-            },
+            }
             "movetime" => {
                 time_state.max_time = Some(pair.1 as f64 / 1000.0);
             }
@@ -370,13 +406,18 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
                 } else if first_arg == time_inc_str {
                     time_state.time_inc = Some(pair.1 as f64 / 1000.0);
                 }
-
             }
         }
     }
 
-    state.engine.maybe_update_table_size(state.get_option_val("Hash") as usize);
-    state.engine.start_search(max_depth, Some(time_state), state.get_option_val("Threads") as usize);
+    state
+        .engine
+        .maybe_update_table_size(state.get_option_val("Hash") as usize);
+    state.engine.start_search(
+        max_depth,
+        Some(time_state),
+        state.get_option_val("Threads") as usize,
+    );
     None
 }
 
@@ -426,12 +467,16 @@ const CMD_FNS: [(fn(&Vec<String>, &mut UCIState) -> Option<String>, &str); 10] =
     (cmd_stop, "stop"),
     (cmd_eval, "eval"),
     (cmd_ratemoves, "ratemoves"),
-    (cmd_d, "d")
+    (cmd_d, "d"),
 ];
 
 // Returns true if the command was understood and processed correctly
 pub fn process_cmd(line_str: String, state: &mut UCIState) -> bool {
-    let parts: Vec<String> = line_str.trim().split_whitespace().map(|v| v.to_string()).collect();
+    let parts: Vec<String> = line_str
+        .trim()
+        .split_whitespace()
+        .map(|v| v.to_string())
+        .collect();
     if parts.is_empty() {
         return false;
     }

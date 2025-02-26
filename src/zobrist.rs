@@ -1,6 +1,6 @@
-use rand::Rng;
 use crate::bitmask::*;
 use crate::board::*;
+use rand::Rng;
 extern crate rand;
 
 pub type Hash = u64;

@@ -1,8 +1,8 @@
 use board_crab_lib::eval::Value;
 use board_crab_lib::fen;
 use board_crab_lib::search;
-use board_crab_lib::transpos;
 use board_crab_lib::thread_flag::ThreadFlag;
+use board_crab_lib::transpos;
 extern crate rand;
 
 // Measures how consistent the search result is at increasing depths
@@ -12,7 +12,9 @@ fn search_consistency_test() {
 
     const MAX_DEPTH: u8 = 2;
 
-    let fens= include_str!("../data/gm_fen_positions.txt").split('\n').collect::<Vec<&str>>();
+    let fens = include_str!("../data/gm_fen_positions.txt")
+        .split('\n')
+        .collect::<Vec<&str>>();
 
     let mut table = transpos::Table::new(4); // Small for low depth
 
@@ -25,8 +27,12 @@ fn search_consistency_test() {
         }
 
         let board = fen::load_fen(cur_fen).unwrap();
-        let best_move_a = search::search(&board, &mut table, MAX_DEPTH - 1, None, None, None).1.root_best_move_idx;
-        let best_move_b = search::search(&board, &mut table, MAX_DEPTH, None, None, None).1.root_best_move_idx;
+        let best_move_a = search::search(&board, &mut table, MAX_DEPTH - 1, None, None, None)
+            .1
+            .root_best_move_idx;
+        let best_move_b = search::search(&board, &mut table, MAX_DEPTH, None, None, None)
+            .1
+            .root_best_move_idx;
 
         if best_move_a == best_move_b {
             total_move_matches += 1;
@@ -38,6 +44,9 @@ fn search_consistency_test() {
     println!("Search consistency: {}%", consistent_frac * 100.0);
 
     if consistent_frac < 0.3 {
-        panic!("Very low search consistency of {}%", consistent_frac * 100.0);
+        panic!(
+            "Very low search consistency of {}%",
+            consistent_frac * 100.0
+        );
     }
 }

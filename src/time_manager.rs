@@ -1,10 +1,10 @@
 use crate::board::*;
 
 pub struct TimeState {
-    pub max_time: Option<f64>, // Hard maximum time
-    pub remaining_time: Option<f64>, // Remaining time on our clock
-    pub time_inc: Option<f64>, // Time given per ply
-    pub moves_till_time_control: Option<u64> // Plies remaining until the next time control
+    pub max_time: Option<f64>,                // Hard maximum time
+    pub remaining_time: Option<f64>,          // Remaining time on our clock
+    pub time_inc: Option<f64>,                // Time given per ply
+    pub moves_till_time_control: Option<u64>, // Plies remaining until the next time control
 }
 
 impl TimeState {
@@ -13,7 +13,7 @@ impl TimeState {
             max_time: None,
             remaining_time: None,
             time_inc: None,
-            moves_till_time_control: None
+            moves_till_time_control: None,
         }
     }
 }
@@ -21,7 +21,6 @@ impl TimeState {
 // Determines how much time to use on the next search, given the board
 // If no time limit is needed, returns None
 pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> {
-
     if time_state.remaining_time.is_none() {
         return if time_state.max_time.is_some() {
             // Just return the max time
@@ -29,7 +28,7 @@ pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> 
         } else {
             // No time limits
             None
-        }
+        };
     }
 
     let num_pieces = board.combined_occupancy().count_ones();
@@ -39,7 +38,10 @@ pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> 
     let mut remaining_moves = remaining_pieces_ratio * 40.0 + 6.0;
 
     if time_state.moves_till_time_control.is_some() {
-        remaining_moves = f64::min(remaining_moves, time_state.moves_till_time_control.unwrap() as f64);
+        remaining_moves = f64::min(
+            remaining_moves,
+            time_state.moves_till_time_control.unwrap() as f64,
+        );
     }
 
     let mut real_remaining_time = time_state.remaining_time.unwrap();
@@ -64,7 +66,11 @@ pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> 
 }
 
 // Determines whether we should stop searching early
-pub fn should_exit_early(time_given_to_use: f64, time_remaining: f64, best_moves: &Vec<u8>) -> bool {
+pub fn should_exit_early(
+    time_given_to_use: f64,
+    time_remaining: f64,
+    best_moves: &Vec<u8>,
+) -> bool {
     let last_depth = best_moves.len();
 
     if last_depth < 5 {

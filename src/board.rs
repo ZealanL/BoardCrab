@@ -1,8 +1,8 @@
-use std::fmt::Write;
 use crate::bitmask::*;
-use crate::{fen, lookup_gen};
 use crate::move_gen;
 use crate::zobrist;
+use crate::{fen, lookup_gen};
+use std::fmt::Write;
 
 pub const PIECE_PAWN: usize = 0;
 pub const PIECE_KNIGHT: usize = 1;
@@ -25,7 +25,7 @@ pub struct Move {
     pub from_piece_idx: usize,
     pub to_piece_idx: usize,
 
-    pub flags: u8
+    pub flags: u8,
 }
 
 impl Move {
@@ -41,7 +41,7 @@ impl Move {
             to: 0,
             from_piece_idx: 0,
             to_piece_idx: 0,
-            flags: 0
+            flags: 0,
         }
     }
 
@@ -60,7 +60,11 @@ impl std::fmt::Display for Move {
         write!(stream, "{}{}", bm_to_coord(self.from), bm_to_coord(self.to))?;
         if self.to_piece_idx != self.from_piece_idx {
             // Promotion
-            write!(stream, "{}", PIECE_CHARS[self.to_piece_idx].to_ascii_lowercase())?;
+            write!(
+                stream,
+                "{}",
+                PIECE_CHARS[self.to_piece_idx].to_ascii_lowercase()
+            )?;
         }
         write!(f, "{}", stream)
     }
@@ -70,7 +74,6 @@ impl std::fmt::Display for Move {
 
 #[derive(Debug, Copy, Clone)]
 pub struct Board {
-
     pub turn_idx: usize,
 
     // Occupancy (where a piece is for each player)
@@ -101,7 +104,6 @@ pub struct Board {
 }
 
 impl Board {
-
     // Board will be empty
     pub const fn new() -> Board {
         Board {
@@ -115,7 +117,7 @@ impl Board {
             castle_rights: [[false; 2]; 2],
             half_move_counter: 0,
 
-            hash: 0
+            hash: 0,
         }
     }
 
@@ -163,7 +165,8 @@ impl Board {
             }
         }
 
-        { // Full-update hash
+        {
+            // Full-update hash
             self.hash = 0;
 
             for team_idx in 0..2 {
@@ -205,12 +208,20 @@ impl Board {
                     PIECE_BISHOP | PIECE_ROOK | PIECE_QUEEN => {
                         // Slider, check for pins
                         let from_idx = bm_to_idx(from);
-                        let piece_base_attacks = lookup_gen::get_piece_base_tos(piece_idx, from_idx);
+                        let piece_base_attacks =
+                            lookup_gen::get_piece_base_tos(piece_idx, from_idx);
                         if piece_base_attacks & opp_king != 0 {
-                            { // Update pin
-                                let between_mask = lookup_gen::get_between_mask_exclusive(from_idx, bm_to_idx(opp_king));
+                            {
+                                // Update pin
+                                let between_mask = lookup_gen::get_between_mask_exclusive(
+                                    from_idx,
+                                    bm_to_idx(opp_king),
+                                );
                                 let pinned_by_us = between_mask & occ_combined;
-                                if (pinned_by_us.count_ones() == 1) && ((pinned_by_us & occ_opp) != 0) { // TODO: Don't need a full popcount, just >1 check
+                                if (pinned_by_us.count_ones() == 1)
+                                    && ((pinned_by_us & occ_opp) != 0)
+                                {
+                                    // TODO: Don't need a full popcount, just >1 check
                                     self.pinned[1 - team_idx] |= pinned_by_us;
                                     debug_assert!((pinned_by_us & occ_opp) == pinned_by_us);
                                 }
@@ -236,16 +247,22 @@ impl Board {
         // From: https://github.com/ZealanL/BoardMouse/blob/4d3b6c608a3cb82a1299580a90dcb3c831fc02f8/src/Engine/BoardState/BoardState.cpp
         // Order: Left/Queen-side, Right/King-side
         const CASTLING_ROOK_FROM_MASKS: [[BitMask; 2]; 2] = [
-            [ // White
-                bm_from_coord("A1"), bm_from_coord("H1")
+            [
+                // White
+                bm_from_coord("A1"),
+                bm_from_coord("H1"),
             ],
-            [ // Black
-                bm_from_coord("A8"), bm_from_coord("H8")
-            ]
+            [
+                // Black
+                bm_from_coord("A8"),
+                bm_from_coord("H8"),
+            ],
         ];
 
-        const CASTLING_ROOK_FROM_COMBINED_MASK: BitMask =
-            CASTLING_ROOK_FROM_MASKS[0][0] | CASTLING_ROOK_FROM_MASKS[0][1] | CASTLING_ROOK_FROM_MASKS[1][0] | CASTLING_ROOK_FROM_MASKS[1][1];
+        const CASTLING_ROOK_FROM_COMBINED_MASK: BitMask = CASTLING_ROOK_FROM_MASKS[0][0]
+            | CASTLING_ROOK_FROM_MASKS[0][1]
+            | CASTLING_ROOK_FROM_MASKS[1][0]
+            | CASTLING_ROOK_FROM_MASKS[1][1];
 
         let from_idx = bm_to_idx(mv.from);
         let to_idx = bm_to_idx(mv.to);
@@ -282,15 +299,19 @@ impl Board {
             self.pieces[1 - self.turn_idx][PIECE_PAWN] &= !en_passant_pos;
             self.occupancy[1 - self.turn_idx] &= !en_passant_pos;
 
-            self.hash ^= zobrist::hash_piece(1 - self.turn_idx, PIECE_PAWN, bm_to_idx(en_passant_pos));
-
+            self.hash ^=
+                zobrist::hash_piece(1 - self.turn_idx, PIECE_PAWN, bm_to_idx(en_passant_pos));
         } else if mv.has_flag(Move::FLAG_CASTLE) {
             // We are castling, find and move the rook
 
             let castle_right: bool = mv.to > mv.from; // This works because we cant castle with a vertical king move
 
             let rook_from = CASTLING_ROOK_FROM_MASKS[self.turn_idx][castle_right as usize];
-            let rook_to = if castle_right { bm_shift(mv.to, -1, 0) } else { bm_shift(mv.to, 1, 0) };
+            let rook_to = if castle_right {
+                bm_shift(mv.to, -1, 0)
+            } else {
+                bm_shift(mv.to, 1, 0)
+            };
 
             debug_assert!(self.pieces[self.turn_idx][PIECE_ROOK] & rook_from == rook_from);
             debug_assert!(self.combined_occupancy() & rook_to == 0);
@@ -322,9 +343,8 @@ impl Board {
             }
         }
 
-        let is_capture_or_pawn_move = (
-            self.occupancy[1 - self.turn_idx] & mv.to != 0)
-            || (mv.from_piece_idx == PIECE_PAWN);
+        let is_capture_or_pawn_move =
+            (self.occupancy[1 - self.turn_idx] & mv.to != 0) || (mv.from_piece_idx == PIECE_PAWN);
         if is_capture_or_pawn_move {
             self.half_move_counter = 0;
         } else {
@@ -362,10 +382,22 @@ impl std::fmt::Display for Board {
         writeln!(stream, "Board {{")?;
         writeln!(stream, "\tFEN: {}", fen::make_fen(self))?;
         writeln!(stream, "\tTurn: {}", self.turn_idx)?;
-        writeln!(stream, "\tOccupancy[0/1]: {}/{}", self.occupancy[0], self.occupancy[1])?;
+        writeln!(
+            stream,
+            "\tOccupancy[0/1]: {}/{}",
+            self.occupancy[0], self.occupancy[1]
+        )?;
         writeln!(stream, "\tCheckers: {}", self.checkers)?;
-        writeln!(stream, "\tPinned[0/1]: {}/{}", self.pinned[0], self.pinned[1])?;
-        writeln!(stream, "\tAttacks[0/1]: {}/{}", self.attacks[0], self.attacks[1])?;
+        writeln!(
+            stream,
+            "\tPinned[0/1]: {}/{}",
+            self.pinned[0], self.pinned[1]
+        )?;
+        writeln!(
+            stream,
+            "\tAttacks[0/1]: {}/{}",
+            self.attacks[0], self.attacks[1]
+        )?;
         writeln!(stream, "\t{DIVIDER}")?;
 
         for i in 0..8 {
@@ -390,13 +422,19 @@ impl std::fmt::Display for Board {
                     decoration_chars = ['+', '+']; // Show checker
                 } else if bm_get(self.pinned[self.turn_idx], x, y) {
                     decoration_chars = ['>', '<']; // Show pinned
-                } else if bm_get(self.pieces[self.turn_idx][PIECE_KING], x, y) && (self.checkers != 0) {
+                } else if bm_get(self.pieces[self.turn_idx][PIECE_KING], x, y)
+                    && (self.checkers != 0)
+                {
                     decoration_chars = ['!', '!']; // Show checked
                 } else {
                     decoration_chars = [' ', ' '];
                 }
 
-                write!(stream, "|{}{piece_char}{}", decoration_chars[0], decoration_chars[1])?;
+                write!(
+                    stream,
+                    "|{}{piece_char}{}",
+                    decoration_chars[0], decoration_chars[1]
+                )?;
             }
 
             writeln!(stream, "| {}\n\t{DIVIDER}", 1 + y)?;

@@ -1,14 +1,14 @@
-use rand::RngCore;
 use crate::bitmask::*;
 use crate::board::*;
 use crate::lookup_gen;
+use rand::RngCore;
 
 #[derive(Debug, Copy, Clone)]
 struct MagicEntry {
     mask: BitMask,
     magic_factor: u64,
     shift: u8,
-    table_offset: usize
+    table_offset: usize,
 }
 
 impl MagicEntry {
@@ -17,7 +17,7 @@ impl MagicEntry {
             mask: 0,
             magic_factor: 0,
             shift: 0,
-            table_offset: !0 // Causes a crash if this entry is used
+            table_offset: !0, // Causes a crash if this entry is used
         }
     }
 
@@ -59,14 +59,19 @@ pub fn init() {
         const BOARD_EDGES_X: BitMask = bm_make_column(0) | bm_make_column(7);
         const BOARD_EDGES_Y: BitMask = bm_make_row(0) | bm_make_row(7);
 
-        let base_moves_bishop = lookup_gen::get_piece_base_tos(PIECE_BISHOP, pos_idx) & !BOARD_EDGES_X & !BOARD_EDGES_Y;
-        let base_moves_rook = (bm_make_column(x) & !BOARD_EDGES_Y) | (bm_make_row(y) & !BOARD_EDGES_X) & !mask;
+        let base_moves_bishop =
+            lookup_gen::get_piece_base_tos(PIECE_BISHOP, pos_idx) & !BOARD_EDGES_X & !BOARD_EDGES_Y;
+        let base_moves_rook =
+            (bm_make_column(x) & !BOARD_EDGES_Y) | (bm_make_row(y) & !BOARD_EDGES_X) & !mask;
 
         for i in 0..2 {
-
             let is_bishop = i == 0;
             let piece_idx = if is_bishop { PIECE_BISHOP } else { PIECE_ROOK };
-            let base_moves = if is_bishop { base_moves_bishop } else { base_moves_rook };
+            let base_moves = if is_bishop {
+                base_moves_bishop
+            } else {
+                base_moves_rook
+            };
 
             let mut occ_subsets = Vec::new();
 
@@ -86,7 +91,7 @@ pub fn init() {
                 mask: base_moves,
                 magic_factor: 0, // To be determined
                 shift: (64 - num_bits) as u8,
-                table_offset: 0 // Set after
+                table_offset: 0, // Set after
             };
 
             let cur_table_size = (1 << num_bits) as usize;
@@ -117,9 +122,13 @@ pub fn init() {
                     // Valid hash found, stop searching
                     magic_entry.table_offset = total_table_size;
                     if is_bishop {
-                        unsafe { LT_MAGICS_BISHOP[pos_idx] = magic_entry; }
+                        unsafe {
+                            LT_MAGICS_BISHOP[pos_idx] = magic_entry;
+                        }
                     } else {
-                        unsafe { LT_MAGICS_ROOK[pos_idx] = magic_entry; }
+                        unsafe {
+                            LT_MAGICS_ROOK[pos_idx] = magic_entry;
+                        }
                     }
                     break;
                 }
@@ -128,14 +137,19 @@ pub fn init() {
             if total_table_size != unsafe { LT_ALL_MOVES.len() } {
                 panic!("Total table size doesn't match expected size");
             }
-            unsafe { LT_ALL_MOVES.resize(total_table_size + cur_table_size, 0); }
+            unsafe {
+                LT_ALL_MOVES.resize(total_table_size + cur_table_size, 0);
+            }
 
             // Populate
             for occ_subset in occ_subsets {
                 let idx = magic_entry.index(occ_subset);
 
                 if idx < total_table_size || idx >= total_table_size + cur_table_size {
-                    panic!("Bad table index while populating tables: {} (this should never happen)", idx);
+                    panic!(
+                        "Bad table index while populating tables: {} (this should never happen)",
+                        idx
+                    );
                 }
 
                 let valid_moves = lookup_gen::get_slider_tos_slow(piece_idx, pos_idx, occ_subset);
@@ -143,7 +157,9 @@ pub fn init() {
                 if unsafe { LT_ALL_MOVES[idx] != 0 } {
                     panic!("Hash collision while populating table (this should never happen)");
                 }
-                unsafe { LT_ALL_MOVES[idx] = valid_moves; }
+                unsafe {
+                    LT_ALL_MOVES[idx] = valid_moves;
+                }
             }
 
             total_table_size += cur_table_size;
