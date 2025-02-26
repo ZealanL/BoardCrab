@@ -280,17 +280,9 @@ fn _search(
 
         let mut next_eval: Value;
         loop {
-            let next_lower_bound;
-            if depth_reduction > 1 {
-                // Search with a null window
-                next_lower_bound = -lower_bound - 0.01;
-            } else {
-                next_lower_bound = -upper_bound;
-            }
-
             next_eval = _search(
                 &next_board, table, search_info,
-                next_lower_bound, -lower_bound,
+                -upper_bound, -lower_bound,
                 depth_remaining - depth_reduction, depth_elapsed + 1,
                 stop_flag, stop_time
             );
@@ -327,7 +319,9 @@ fn _search(
                     // Penalize all the moves we already searched
                     for j in 0..i {
                         let omv = &moves[rated_moves[j].idx];
-                        search_info.history_values[board.turn_idx][omv.from_piece_idx][bm_to_idx(omv.to)] -= history_weight / (i as Value);
+                        if omv.is_quiet() {
+                            search_info.history_values[board.turn_idx][omv.from_piece_idx][bm_to_idx(omv.to)] -= history_weight / (i as Value);
+                        }
                     }
                 }
                 break
