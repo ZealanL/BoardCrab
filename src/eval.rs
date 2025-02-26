@@ -64,7 +64,7 @@ fn get_pawn_attack_mask(board: &Board, team_idx: usize) -> BitMask {
     capture_mask
 }
 
-fn eval_material(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
+pub fn eval_material(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
     let mut value: Value = 0.0;
     for piece_idx in 0..NUM_PIECES_NO_KING {
         value +=
@@ -75,7 +75,7 @@ fn eval_material(board: &Board, team_idx: usize, opp_attack_power: Value) -> Val
     value
 }
 
-fn eval_piece_type(board: &Board, team_idx: usize, piece_idx: usize, piece_mask: BitMask, opp_attack_power: Value) -> Value {
+pub fn eval_piece_type(board: &Board, team_idx: usize, piece_idx: usize, piece_mask: BitMask, opp_attack_power: Value) -> Value {
     let mut value: Value = 0.0;
 
     let opp_pawns = board.pieces[1 - team_idx][PIECE_PAWN];
@@ -136,12 +136,12 @@ fn eval_piece_type(board: &Board, team_idx: usize, piece_idx: usize, piece_mask:
     value
 }
 
-fn eval_mobility(board: &Board, team_idx: usize) -> Value {
+pub fn eval_mobility(board: &Board, team_idx: usize) -> Value {
     let attacks = board.attacks[team_idx];
     (attacks.count_ones() as Value) * 0.02 // Per square-attacked
 }
 
-fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
+pub fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value) -> Value {
     if opp_attack_power <= 0.0 {
         return 0.0;
     }
@@ -274,13 +274,14 @@ pub fn print_eval(board: &Board) {
 
 // Evaluates a move
 pub fn eval_move(board: &Board, mv: &Move) -> Value {
-    const CAPTURE_BASE_BONUS: Value = 1.0; // Always give captures a bit of a bonus
+    const CAPTURE_BASE_BONUS: Value = 1.0;
     const CHECK_BONUS: Value = 1.0;
     const PIN_BONUS: Value = 0.0;
     const TURN_BONUS: Value = 0.1;
 
     let mut eval: Value = 0.0;
 
+    let to_idx = bm_to_idx(mv.to);
     let to_defended = (board.attacks[1 - board.turn_idx] & mv.to) != 0;
 
     if mv.has_flag(Move::FLAG_PROMOTION) {
@@ -309,7 +310,6 @@ pub fn eval_move(board: &Board, mv: &Move) -> Value {
     }
 
     // Determine if the move is a check or pin
-    let to_idx = bm_to_idx(mv.to);
     let opp_king_pos = board.pieces[1 - board.turn_idx][PIECE_KING];
     let next_base_moves = lookup_gen::get_piece_base_tos(mv.to_piece_idx, to_idx);
     if (next_base_moves & opp_king_pos) != 0 {
