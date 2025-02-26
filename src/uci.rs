@@ -159,6 +159,23 @@ macro_rules! cmd_err {
     };
 }
 
+inventory::collect!(Command);
+pub struct Command {
+    name: &'static str,
+    function: fn(&Vec<String>, &mut UCIState) -> Option<String>,
+}
+impl Command {
+    pub const fn new(
+        name: &'static str,
+        function: fn(&Vec<String>, &mut UCIState) -> Option<String>,
+    ) -> Self {
+        Command { name, function }
+    }
+}
+
+inventory::submit! {
+    Command::new("uci", cmd_uci)
+}
 fn cmd_uci(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     println!("id name BoardCrab v{}", env!("CARGO_PKG_VERSION"));
     println!("id author ZealanL");
@@ -190,11 +207,17 @@ fn cmd_uci(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     None
 }
 
+inventory::submit! {
+    Command::new("isready", cmd_isready)
+}
 fn cmd_isready(_parts: &Vec<String>, _state: &mut UCIState) -> Option<String> {
     println!("readyok");
     None
 }
 
+inventory::submit! {
+    Command::new("setoption", cmd_setoption)
+}
 fn cmd_setoption(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     if parts.len() <= 3 || parts[1] != "name" {
         return cmd_err!("Invalid syntax, format: \"setoption name <name> value <value>\"");
@@ -286,10 +309,16 @@ fn cmd_setoption(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     cmd_err!("No option named \"{}\"", option_name)
 }
 
+inventory::submit! {
+    Command::new("quit", cmd_quit)
+}
 fn cmd_quit(_parts: &Vec<String>, _state: &mut UCIState) -> Option<String> {
     std::process::exit(0)
 }
 
+inventory::submit! {
+    Command::new("position", cmd_position)
+}
 fn cmd_position(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     if parts.len() < 2 {
         cmd_err!("Too few arguments");
@@ -355,6 +384,9 @@ fn cmd_position(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     None
 }
 
+inventory::submit! {
+    Command::new("go", cmd_go)
+}
 fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     let board = state.engine.get_board();
 
@@ -421,16 +453,25 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     None
 }
 
+inventory::submit! {
+    Command::new("stop", cmd_stop)
+}
 fn cmd_stop(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     state.engine.stop_search();
     None
 }
 
+inventory::submit! {
+    Command::new("eval", cmd_eval)
+}
 fn cmd_eval(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     print_eval(state.engine.get_board());
     None
 }
 
+inventory::submit! {
+    Command::new("ratemoves", cmd_ratemoves)
+}
 fn cmd_ratemoves(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     let mut moves_buf = move_gen::MoveBuffer::new();
     move_gen::generate_moves(state.engine.get_board(), &mut moves_buf);
@@ -452,23 +493,13 @@ fn cmd_ratemoves(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     None
 }
 
+inventory::submit! {
+    Command::new("d", cmd_d)
+}
 fn cmd_d(_parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
     println!("{}", state.engine.get_board());
     None
 }
-
-const CMD_FNS: [(fn(&Vec<String>, &mut UCIState) -> Option<String>, &str); 10] = [
-    (cmd_uci, "uci"),
-    (cmd_isready, "isready"),
-    (cmd_setoption, "setoption"),
-    (cmd_quit, "quit"),
-    (cmd_position, "position"),
-    (cmd_go, "go"),
-    (cmd_stop, "stop"),
-    (cmd_eval, "eval"),
-    (cmd_ratemoves, "ratemoves"),
-    (cmd_d, "d"),
-];
 
 // Returns true if the command was understood and processed correctly
 pub fn process_cmd(line_str: String, state: &mut UCIState) -> bool {
@@ -481,9 +512,9 @@ pub fn process_cmd(line_str: String, state: &mut UCIState) -> bool {
         return false;
     }
 
-    for (func, cmd_name) in CMD_FNS {
-        if parts[0].eq_ignore_ascii_case(cmd_name) {
-            let cmd_err = func(&parts, state);
+    for Command { name, function } in inventory::iter::<Command> {
+        if parts[0].eq_ignore_ascii_case(name) {
+            let cmd_err = function(&parts, state);
             if cmd_err.is_some() {
                 println!("info string Error: {}", cmd_err.unwrap());
                 return false;
