@@ -87,7 +87,8 @@ impl Bucket {
 
 pub struct Table {
     buckets: Vec<Bucket>,
-    age_count: u64
+    age_count: u64,
+    size_mbs: usize
 }
 
 impl Table {
@@ -97,8 +98,13 @@ impl Table {
         buckets.resize(num_buckets, Bucket::new());
         Table {
             buckets,
-            age_count: 0
+            age_count: 0,
+            size_mbs
         }
+    }
+
+    pub fn get_size_mbs(&self) -> usize {
+        self.size_mbs
     }
 
     pub fn is_any_entry_locked(&self) -> bool{

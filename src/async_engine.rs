@@ -26,7 +26,7 @@ impl AsyncEngine {
         }
     }
 
-    pub fn start_search(&mut self, max_depth: u8, time_state: Option<time_manager::TimeState>) {
+    pub fn start_search(&mut self, max_depth: u8, time_state: Option<time_manager::TimeState>, num_threads: usize) {
 
         self.stop_search();
 
@@ -40,8 +40,6 @@ impl AsyncEngine {
                 stop_time = Some(start_time + std::time::Duration::from_secs_f64(max_time_to_use.unwrap()));
             }
         }
-
-        let num_threads = 8; // TODO: Make configurable
 
         for thread_idx in 0..num_threads {
             let board = self.board.clone();
@@ -140,5 +138,18 @@ impl AsyncEngine {
 
     pub fn set_board(&mut self, new_board: &Board) {
         self.board = new_board.clone();
+    }
+
+    // NOTE: Doesn't reset the table if the size matches
+    pub fn maybe_update_table_size(&mut self, new_size_mbs: usize) {
+        self.stop_search();
+        if self.arc_table.get_size_mbs() != new_size_mbs {
+            self.arc_table = Arc::new(transpos::Table::new(new_size_mbs));
+        }
+    }
+
+    pub fn reset_table(&mut self) {
+        self.stop_search();
+        self.arc_table = Arc::new(transpos::Table::new(self.arc_table.get_size_mbs()));
     }
 }

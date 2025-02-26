@@ -1,5 +1,4 @@
 use board_crab_lib::uci;
-use board_crab_lib::async_engine::AsyncEngine;
 
 fn main() {
     board_crab_lib::init();
@@ -14,11 +13,10 @@ fn main() {
         }
     }));
 
-    let mut engine = AsyncEngine::new(100);
-
+    let mut state = uci::UCIState::new();
     loop {
         let mut input = String::new();
         std::io::stdin().read_line(&mut input).unwrap();
-        uci::process_cmd(input, &mut engine);
+        uci::process_cmd(input, &mut state);
     }
 }
