@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use crate::bitmask::*;
 use crate::board::*;
 use crate::eval::*;
-use crate::move_gen;
+use crate::{move_gen, uci};
 use crate::zobrist::Hash;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
@@ -55,7 +55,7 @@ pub struct SearchInfo {
 
     // See https://www.chessprogramming.org/History_Heuristic
     pub history_values: [[[Value; 64]; NUM_PIECES]; 2],
-    pub root_best_move_idx: u8
+    pub root_best_move: Option<u8>
 }
 
 impl SearchInfo {
@@ -64,7 +64,7 @@ impl SearchInfo {
             total_nodes: 0,
             depth_hashes: [0; 256],
             history_values: [[[0.0; 64]; NUM_PIECES]; 2],
-            root_best_move_idx: 0
+            root_best_move: None
         }
     }
 }
@@ -119,7 +119,14 @@ fn _search(
         }
     }
 
-    let table_entry = table.get_fast(board.hash);
+    let table_entry;
+    if depth_elapsed > 0 {
+        table_entry = table.get_fast(board.hash);
+    } else {
+        // We don't use the tranposition table at depth 0
+        // Otherwise we may not populate root_best_move
+        table_entry = transpos::Entry::new();
+    }
 
     // Table lookup
     let mut table_best_move: Option<u8> = None;
@@ -257,6 +264,7 @@ fn _search(
     let mut best_move_idx: usize = 0;
     for i in 0..rated_moves.len() {
         let move_idx = rated_moves[i].idx;
+        let move_eval = rated_moves[i].eval;
         let mv = &moves[move_idx];
 
         let mut next_board: Board = board.clone();
@@ -314,13 +322,15 @@ fn _search(
                 if mv.is_quiet() {
                     // Higher depth means better search and thus better quality info on how good this move is
                     let history_weight = 1.0 / (depth_elapsed as Value);
-                    search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)] += history_weight;
+                    let history = &mut search_info.history_values[board.turn_idx][mv.from_piece_idx][bm_to_idx(mv.to)];
+                    *history += history_weight;
 
                     // Penalize all the moves we already searched
                     for j in 0..i {
                         let omv = &moves[rated_moves[j].idx];
                         if omv.is_quiet() {
-                            search_info.history_values[board.turn_idx][omv.from_piece_idx][bm_to_idx(omv.to)] -= history_weight / (i as Value);
+                            let other_history = &mut search_info.history_values[board.turn_idx][omv.from_piece_idx][bm_to_idx(omv.to)];
+                            *other_history -= history_weight / (i as Value);
                         }
                     }
                 }
@@ -329,12 +339,13 @@ fn _search(
         }
     }
 
+
     table.set(
         board.hash, best_eval, best_move_idx as u8, depth_remaining,
         {
             if best_eval >= upper_bound {
                 transpos::EntryType::FailHigh
-            } else if best_eval <= lower_bound {
+            } else if best_eval < lower_bound {
                 transpos::EntryType::FailLow
             } else {
                 transpos::EntryType::Exact
@@ -343,7 +354,7 @@ fn _search(
     );
 
     if depth_elapsed == 0 {
-        search_info.root_best_move_idx = best_move_idx as u8;
+        search_info.root_best_move = Some(best_move_idx as u8);
     }
 
     best_eval

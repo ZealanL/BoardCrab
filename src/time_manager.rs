@@ -1,7 +1,8 @@
 use crate::board::*;
 
+#[derive(Debug, Clone, Copy)]
 pub struct TimeState {
-    pub max_time: Option<f64>, // Hard maximum time
+    pub hard_max_time: Option<f64>, // Hard maximum time
     pub remaining_time: Option<f64>, // Remaining time on our clock
     pub time_inc: Option<f64>, // Time given per ply
     pub moves_till_time_control: Option<u64> // Plies remaining until the next time control
@@ -10,7 +11,7 @@ pub struct TimeState {
 impl TimeState {
     pub fn new() -> TimeState {
         TimeState {
-            max_time: None,
+            hard_max_time: None,
             remaining_time: None,
             time_inc: None,
             moves_till_time_control: None
@@ -20,16 +21,12 @@ impl TimeState {
 
 // Determines how much time to use on the next search, given the board
 // If no time limit is needed, returns None
-pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> {
+// Note: IGNORES time_state.hard_max_time
+pub fn get_max_time_to_use(board: &Board, time_state: &TimeState) -> Option<f64> {
 
     if time_state.remaining_time.is_none() {
-        return if time_state.max_time.is_some() {
-            // Just return the max time
-            time_state.max_time
-        } else {
-            // No time limits
-            None
-        }
+        // No time limits
+        return None;
     }
 
     let num_pieces = board.combined_occupancy().count_ones();
@@ -51,10 +48,6 @@ pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> 
 
     // We'll say that the maximum is 1.3x the base time to use
     let mut max_time_to_use = f64::min(base_time_to_use * 1.3, real_remaining_time);
-    if time_state.max_time.is_some() {
-        // Clamp to maximum time
-        max_time_to_use = f64::min(max_time_to_use, time_state.max_time.unwrap());
-    }
 
     // Always leave a little buffer so we don't run out of time
     const TIME_BUFFER: f64 = 0.05;
@@ -64,7 +57,7 @@ pub fn get_max_time_to_use(board: &Board, time_state: TimeState) -> Option<f64> 
 }
 
 // Determines whether we should stop searching early
-pub fn should_exit_early(time_given_to_use: f64, time_remaining: f64, best_moves: &Vec<u8>) -> bool {
+pub fn should_exit_early(time_given_to_use: f64, time_used: f64, best_moves: &Vec<u8>) -> bool {
     let last_depth = best_moves.len();
 
     if last_depth < 5 {
@@ -72,7 +65,9 @@ pub fn should_exit_early(time_given_to_use: f64, time_remaining: f64, best_moves
         return false;
     }
 
-    if time_remaining > time_given_to_use * 0.9 {
+    let time_remaining = time_given_to_use - time_used;
+
+    if time_remaining > time_given_to_use * 0.90 {
         // We still have 90% of our time, don't stop
         return false;
     }

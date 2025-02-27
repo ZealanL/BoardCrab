@@ -188,7 +188,7 @@ fn eval_team(board: &Board, team_idx: usize) -> Value {
 }
 
 // Returns true if the player can possibly checkmate the other
-fn is_checkmate_possible(board: &Board, team_idx: usize) -> bool {
+pub fn is_checkmate_possible(board: &Board, team_idx: usize) -> bool {
     if board.pieces[team_idx][PIECE_PAWN] != 0 {
         return true;
     }

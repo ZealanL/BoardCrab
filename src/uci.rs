@@ -41,6 +41,17 @@ impl UCIOption {
         }
     }
 
+    pub fn new_bool(name: &'static str, default: bool, change_callback: Option<fn (&mut UCIState, i64)>) -> UCIOption {
+        UCIOption {
+            option_type: UCIOptionType::Int,
+            name,
+            value: default as i64,
+            value_min: 0,
+            value_max: 1,
+            change_callback
+        }
+    }
+
     pub fn new_button(name: &'static str, change_callback: fn (&mut UCIState, i64)) -> UCIOption {
         UCIOption {
             option_type: UCIOptionType::Button,
@@ -342,7 +353,7 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
         }
     }
 
-    let mut max_depth: u8 = u8::MAX;
+    let mut max_depth: Option<u8> = None;
     let mut time_state: TimeState = TimeState::new();
 
     let remaining_time_str = if board.turn_idx == 0 { "wtime" } else { "btime" };
@@ -352,10 +363,10 @@ fn cmd_go(parts: &Vec<String>, state: &mut UCIState) -> Option<String> {
         let first_arg = pair.0.as_str();
         match first_arg {
             "depth" => {
-                max_depth = pair.1 as u8;
+                max_depth = Some(pair.1 as u8);
             },
             "movetime" => {
-                time_state.max_time = Some(pair.1 as f64 / 1000.0);
+                time_state.hard_max_time = Some(pair.1 as f64 / 1000.0);
             }
             "movestogo" => {
                 time_state.moves_till_time_control = Some(pair.1 as u64);

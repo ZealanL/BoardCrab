@@ -172,7 +172,7 @@ pub fn load_fen_from_parts(fen_parts: &Vec<String>) -> Result<Board> {
 }
 
 pub fn load_fen(fen: &str) -> Result<Board> {
-    let fen_parts = fen.split(" ").map(|v| v.to_string()).collect::<Vec<String>>();
+    let fen_parts = fen.trim().split(" ").map(|v| v.to_string()).collect::<Vec<String>>();
     load_fen_from_parts(&fen_parts)
 }
 
