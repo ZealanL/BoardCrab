@@ -2,7 +2,7 @@ use std::collections::HashSet;
 use crate::bitmask::*;
 use crate::board::*;
 use crate::eval::*;
-use crate::{move_gen, uci};
+use crate::move_gen;
 use crate::zobrist::Hash;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
@@ -69,8 +69,23 @@ impl SearchInfo {
     }
 }
 
+#[derive(Debug, Copy, Clone)]
+pub struct SearchConfig {
+    pub null_move_pruning: bool,
+    pub late_move_reduction_factor: f32
+}
+
+impl SearchConfig {
+    pub fn new() -> SearchConfig {
+        SearchConfig {
+            null_move_pruning: true,
+            late_move_reduction_factor: 1.0
+        }
+    }
+}
+
 fn _search(
-    board: &Board, table: &mut transpos::Table, search_info: &mut SearchInfo,
+    board: &Board, table: &mut transpos::Table, config: &SearchConfig, search_info: &mut SearchInfo,
     mut lower_bound: Value, upper_bound: Value,
     depth_remaining: u8, depth_elapsed: i64,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> Value {
@@ -163,7 +178,8 @@ fn _search(
     }
 
     // Null move pruning
-    if cur_eval >= upper_bound &&
+    if config.null_move_pruning &&
+        cur_eval >= upper_bound &&
         board.checkers == 0 &&
         depth_remaining >= 1 &&
         depth_elapsed >= 2
@@ -177,7 +193,7 @@ fn _search(
 
             let next_depth = depth_remaining / 2;
             let next_result = _search(
-                &next_board, table, search_info,
+                &next_board, table, config, search_info,
                 -upper_bound, -upper_bound + 0.01,
                 next_depth, depth_elapsed + 1,
                 stop_flag, stop_time
@@ -207,6 +223,8 @@ fn _search(
         if (table_best_move.unwrap() as usize) < moves.len() {
             table_best_move_idx = table_best_move.unwrap() as usize;
         } else {
+            // Hash collision
+            // Very rare so we'll just ignore it
             debug_assert!(false);
             table_best_move_idx = usize::MAX;
         }
@@ -264,32 +282,31 @@ fn _search(
     let mut best_move_idx: usize = 0;
     for i in 0..rated_moves.len() {
         let move_idx = rated_moves[i].idx;
-        let move_eval = rated_moves[i].eval;
         let mv = &moves[move_idx];
 
         let mut next_board: Board = board.clone();
         next_board.do_move(mv);
 
         let gives_check = next_board.checkers != 0;
-        let mut depth_reduction: u8 = 1;
+        let mut depth_reduction_f: f32 = 1.0;
 
         if gives_check {
-            depth_reduction = 0; // Extend after a check
+            depth_reduction_f = 0.0; // Extend after a check
         } else {
             // Late move reductions
             if i >= 1 && depth_elapsed >= 2 {
-                let reduction_amount = (i as f32) * 0.1 + (depth_remaining as f32) * 0.2;
-                depth_reduction += reduction_amount.round() as u8;
+                let reduction_amount =
+                    ((i as f32) * 0.1 + (depth_remaining as f32) * 0.2) * config.late_move_reduction_factor;
+                depth_reduction_f += reduction_amount;
             }
         }
 
-        // Prevent depth reduction overflow
-        depth_reduction = u8::min(depth_reduction, depth_remaining);
+        let mut depth_reduction = depth_reduction_f.clamp(0.0, depth_remaining as f32).round() as u8;
 
         let mut next_eval: Value;
         loop {
             next_eval = _search(
-                &next_board, table, search_info,
+                &next_board, table, config, search_info,
                 -upper_bound, -lower_bound,
                 depth_remaining - depth_reduction, depth_elapsed + 1,
                 stop_flag, stop_time
@@ -361,7 +378,7 @@ fn _search(
 }
 
 pub fn search(
-    board: &Board, table: &mut transpos::Table, depth: u8,
+    board: &Board, table: &mut transpos::Table, config: &SearchConfig, depth: u8,
     guessed_eval: Option<Value>,
     stop_flag: Option<&ThreadFlag>, stop_time: Option<std::time::Instant>) -> (Value, SearchInfo) {
 
@@ -385,7 +402,7 @@ pub fn search(
         }
 
         let eval = _search(
-            board, table, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
+            board, table, config, &mut search_info, window_min, window_max, depth, 0, stop_flag, stop_time
         );
 
         if eval >= window_min && eval < window_max {
@@ -395,7 +412,7 @@ pub fn search(
     }
 
     let search_result = _search(
-        board, table, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
+        board, table, config, &mut search_info, -VALUE_CHECKMATE, VALUE_CHECKMATE, depth, 0, stop_flag, stop_time
     );
 
     (search_result, search_info)

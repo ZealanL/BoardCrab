@@ -79,7 +79,7 @@ impl UCIState {
                     state.engine.maybe_update_table_size(new_value as usize);
                 })
             ),
-            UCIOption::new_button("Clear Hash", |state: &mut UCIState, new_value: i64| {
+            UCIOption::new_button("Clear Hash", |state: &mut UCIState, _new_value: i64| {
                  state.engine.reset_table();
             }),
         ];

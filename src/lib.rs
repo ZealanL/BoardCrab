@@ -1,5 +1,6 @@
 pub mod board;
 pub mod fen;
+pub mod pgn;
 pub mod search;
 pub mod move_gen;
 pub mod eval;

@@ -5,6 +5,7 @@ use crate::board::*;
 use crate::move_gen;
 use crate::search;
 use crate::eval::*;
+use crate::search::SearchConfig;
 use crate::transpos;
 use crate::thread_flag::ThreadFlag;
 use crate::uci;
@@ -15,11 +16,12 @@ pub struct AsyncSearchConfig<'a> {
     pub stop_flag: Option<&'a ThreadFlag>,
     pub start_time: Instant,
     pub time_state: Option<time_manager::TimeState>,
+    pub print_uci: bool,
 
-    pub print_uci: bool
+    pub search_config: SearchConfig
 }
 
-pub fn do_search_thread(board: &Board, table: &mut transpos::Table, search_cfg: &AsyncSearchConfig) -> Option<u8> {
+pub fn do_search_thread(board: &Board, table: &mut transpos::Table, async_search_cfg: &AsyncSearchConfig) -> (Option<u8>, Value) {
 
     // Only exists if we have a soft time limit
     let mut max_time_to_use: Option<f64> = None;
@@ -27,20 +29,20 @@ pub fn do_search_thread(board: &Board, table: &mut transpos::Table, search_cfg: 
     // The time at which we should stop searching, either due to a soft or hard limit
     let mut stop_time: Option<Instant> = None;
 
-    if search_cfg.time_state.is_some() {
+    if async_search_cfg.time_state.is_some() {
         // Possibly determine the maximum time to use (this will be our soft time limit)
-        let time_state = search_cfg.time_state.clone().unwrap();
+        let time_state = async_search_cfg.time_state.clone().unwrap();
         max_time_to_use = time_manager::get_max_time_to_use(board, &time_state);
 
         let mut soft_stop_time: Option<Instant> = None;
         if max_time_to_use.is_some() {
-            soft_stop_time = Some(search_cfg.start_time + Duration::from_secs_f64(max_time_to_use.unwrap()));
+            soft_stop_time = Some(async_search_cfg.start_time + Duration::from_secs_f64(max_time_to_use.unwrap()));
         }
 
         let mut hard_stop_time: Option<Instant> = None;
         let hard_max_time = time_state.hard_max_time.clone();
         if hard_max_time.is_some() {
-            hard_stop_time = Some(search_cfg.start_time + Duration::from_secs_f64(hard_max_time.unwrap()));
+            hard_stop_time = Some(async_search_cfg.start_time + Duration::from_secs_f64(hard_max_time.unwrap()));
         }
 
         if soft_stop_time.is_some() && hard_stop_time.is_some() {
@@ -56,8 +58,8 @@ pub fn do_search_thread(board: &Board, table: &mut transpos::Table, search_cfg: 
 
     let mut best_moves = Vec::new();
     let mut guessed_next_eval: Option<Value> = None;
-    let max_depth = if search_cfg.max_depth.is_some() {
-        search_cfg.max_depth.unwrap()
+    let max_depth = if async_search_cfg.max_depth.is_some() {
+        async_search_cfg.max_depth.unwrap()
     } else {
         u8::MAX
     };
@@ -66,9 +68,9 @@ pub fn do_search_thread(board: &Board, table: &mut transpos::Table, search_cfg: 
 
         {
             let (search_eval, search_info) = search::search(
-                &board, table, depth,
+                &board, table, &async_search_cfg.search_config, depth,
                 guessed_next_eval,
-                search_cfg.stop_flag, stop_time
+                async_search_cfg.stop_flag, stop_time
             );
 
             if search_eval.is_infinite() {
@@ -83,8 +85,8 @@ pub fn do_search_thread(board: &Board, table: &mut transpos::Table, search_cfg: 
             guessed_next_eval = Some(search_eval);
 
             let cur_time = Instant::now();
-            let elapsed_time_f64 = (cur_time - search_cfg.start_time).as_secs_f64();
-            if search_cfg.print_uci {
+            let elapsed_time_f64 = (cur_time - async_search_cfg.start_time).as_secs_f64();
+            if async_search_cfg.print_uci {
                 // TODO: Somewhat lame to be calling UCI stuff from async_engine
 
                 uci::print_search_results(&board, table, depth, search_eval, &search_info, elapsed_time_f64);
@@ -99,10 +101,9 @@ pub fn do_search_thread(board: &Board, table: &mut transpos::Table, search_cfg: 
     }
 
     if best_moves.len() > 0 {
-        Some(*best_moves.last().unwrap())
+        (Some(*best_moves.last().unwrap()), guessed_next_eval.unwrap())
     } else {
-        println!("No best moves from depth {}", max_depth);
-        None
+        (None, guessed_next_eval.unwrap())
     }
 }
 
@@ -141,16 +142,19 @@ impl AsyncEngine {
                     let table = unsafe { &mut *(table_ptr as *mut transpos::Table) };
                     let is_leader_thread = thread_idx == 0;
 
-                    let search_config = AsyncSearchConfig {
+                    let mut search_config = SearchConfig::new();
+
+                    let async_search_config = AsyncSearchConfig {
                         max_depth,
                         stop_flag: Some(&stop_flag),
                         start_time,
                         time_state,
+                        print_uci: is_leader_thread,
 
-                        print_uci: is_leader_thread
+                        search_config
                     };
 
-                    let mut best_move = do_search_thread(&board, table, &search_config);
+                    let (best_move, _eval) = do_search_thread(&board, table, &async_search_config);
 
                     if is_leader_thread {
                         if best_move.is_some() {
