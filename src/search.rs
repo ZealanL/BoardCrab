@@ -356,9 +356,15 @@ fn _search(
         }
     }
 
-
     table.set(
-        board.hash, best_eval, best_move_idx as u8, depth_remaining,
+        board.hash, best_eval,
+        // Only update best move if we exceeded the lower bound
+        if best_eval >= lower_bound {
+            best_move_idx as u8
+        } else {
+            table_entry.best_move_idx
+        },
+        depth_remaining,
         {
             if best_eval >= upper_bound {
                 transpos::EntryType::FailHigh
