@@ -282,6 +282,7 @@ fn _search(
     let mut best_move_idx: usize = 0;
     for i in 0..rated_moves.len() {
         let move_idx = rated_moves[i].idx;
+        let move_eval = rated_moves[i].eval;
         let mv = &moves[move_idx];
 
         let mut next_board: Board = board.clone();
@@ -292,7 +293,7 @@ fn _search(
 
         if gives_check {
             depth_reduction_f = 0.0; // Extend after a check
-        } else {
+        } else if mv.is_quiet() || move_eval < 0.0 {
             // Late move reductions
             if i >= 1 && depth_elapsed >= 2 {
                 let reduction_amount =
