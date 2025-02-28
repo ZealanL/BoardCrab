@@ -148,7 +148,11 @@ impl Board {
 
     /////////////////////////////////////////////////
 
-    pub fn combined_occupancy(&self) -> u64 {
+    pub fn combined_pieces(&self, piece_idx: usize) -> BitMask{
+         self.pieces[0][piece_idx] | self.pieces[1][piece_idx]
+    }
+
+    pub fn combined_occupancy(&self) -> BitMask {
         self.occupancy[0] | self.occupancy[1]
     }
 

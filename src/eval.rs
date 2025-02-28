@@ -170,6 +170,43 @@ pub fn eval_king_safety(board: &Board, team_idx: usize, opp_attack_power: Value)
     dual_weight(eval_lookup::KING_ACCESSIBILITY, opp_attack_power) * (accessibility as Value)
 }
 
+pub fn is_special_draw(board: &Board) -> bool {
+    if board.combined_pieces(PIECE_PAWN) == 0 {
+        // No-pawn game
+
+        const MAX_PIECES_FOR_DRAW: usize = 4;
+        let num_pieces = (board.combined_occupancy().count_ones() - 2) as usize;
+
+        if num_pieces <= MAX_PIECES_FOR_DRAW {
+            const SIMPLE_PIECE_VALS: [Value; NUM_PIECES] = [1.0, 3.0, 3.5, 5.0, 10.0, 0.0];
+            let mut material_evals: [Value; 2] = [0.0, 0.0];
+            for cur_team_idx in 0..2 {
+                for piece_idx in 0..NUM_PIECES_NO_KING {
+                    if piece_idx == PIECE_PAWN {
+                        continue;
+                    }
+                    let count = board.pieces[cur_team_idx][piece_idx].count_ones();
+                    material_evals[cur_team_idx] += (count as Value) * SIMPLE_PIECE_VALS[piece_idx];
+                }
+            }
+
+            let material_advantage = (material_evals[0] - material_evals[1]).abs();
+            if material_advantage < 4.0 {
+                // Piece-only endgames (with <= MAX_PIECES_FOR_DRAW) where we aren't up a rook
+                //   are always draws, at least from what I can tell
+                return true;
+            }
+        }
+
+        if num_pieces == 2 && board.combined_pieces(PIECE_KNIGHT).count_ones() == 2 {
+            // There are only two knights on the board, no forced checkmate(*)
+            return true;
+        }
+    }
+
+    false
+}
+
 fn eval_team(board: &Board, team_idx: usize) -> Value {
     let opp_attack_power = calc_attacking_power(board, 1 - team_idx);
 
@@ -212,24 +249,13 @@ pub fn is_checkmate_possible(board: &Board, team_idx: usize) -> bool {
 
 // Evaluates the position from the perspective of the current turn
 pub fn eval_board(board: &Board) -> Value {
+
+    if is_special_draw(board) {
+        return 0.0;
+    }
+
     let self_eval = eval_team(board, board.turn_idx);
     let opp_eval = eval_team(board, 1 - board.turn_idx);
-
-    if (self_eval + opp_eval) < 15.0 {
-        // Check for insufficient material draw
-
-        let mut checkmate_possible: bool = false;
-        for team_idx in 0..2 {
-            if is_checkmate_possible(board, team_idx) {
-                checkmate_possible = true;
-                break;
-            }
-        }
-
-        if !checkmate_possible {
-            return 0.0;
-        }
-    }
 
     self_eval - opp_eval
 }
@@ -244,6 +270,7 @@ pub fn print_eval(board: &Board) {
     );
 
     let team_vals = [eval_team(board, 0), eval_team(board, 1)];
+
     let mut entries = [Vec::new(), Vec::new()];
     for team_idx in 0..2 {
         entries[team_idx].push(("Material".to_string(), eval_material(board, team_idx, attack_power[1 - team_idx])));
