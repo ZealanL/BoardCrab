@@ -106,6 +106,7 @@ fn simulate_game(tables: &mut [&mut transpos::Table; 2], search_configs: [Search
             search_config
         };
         let (best_move_idx, eval) = async_engine::do_search_thread(&board, tables[board.turn_idx], &async_search_config);
+        clock_times[board.turn_idx] += GAME_CLOCK_TIME_COMPLEMENT - start_time.elapsed().as_secs_f64();
 
         if eval.abs() >= TRUNCATE_EVAL_THRESH && last_eval.abs() >= TRUNCATE_EVAL_THRESH {
             if eval.signum() == -last_eval.signum() {
@@ -126,7 +127,6 @@ fn simulate_game(tables: &mut [&mut transpos::Table; 2], search_configs: [Search
         let best_move = move_buffer[best_move_idx.unwrap() as usize];
         board.do_move(&best_move);
         moves.push(best_move);
-        clock_times[board.turn_idx] += GAME_CLOCK_TIME_COMPLEMENT - start_time.elapsed().as_secs_f64();
         last_eval = eval;
     }
 
@@ -207,7 +207,7 @@ fn main() {
             ];
 
             loop {
-                let mut cur_fen;
+                let cur_fen;
                 {
                     let mut game_results = fen_stack_arc_clone.lock().unwrap();
                     if !game_results.next_fens.is_empty() {
