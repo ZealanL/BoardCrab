@@ -72,6 +72,7 @@ impl SearchInfo {
 #[derive(Debug, Copy, Clone)]
 pub struct SearchConfig {
     pub null_move_pruning: bool,
+    pub futility_pruning: bool,
     pub late_move_reduction_factor: f32
 }
 
@@ -79,6 +80,7 @@ impl SearchConfig {
     pub fn new() -> SearchConfig {
         SearchConfig {
             null_move_pruning: true,
+            futility_pruning: true,
             late_move_reduction_factor: 1.0
         }
     }
@@ -299,6 +301,15 @@ fn _search(
                 let reduction_amount =
                     ((i as f32) * 0.1 + (depth_remaining as f32) * 0.2) * config.late_move_reduction_factor;
                 depth_reduction_f += reduction_amount;
+            }
+
+            // Futility pruning
+            if config.futility_pruning && i >= 1 && depth_remaining <= 4 {
+                let max_end_eval = cur_eval + 1.5 * depth_remaining as Value;
+                if max_end_eval < lower_bound {
+                    // Prune the rest of the branch
+                    break;
+                }
             }
         }
 
