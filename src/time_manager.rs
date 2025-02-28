@@ -33,7 +33,7 @@ pub fn get_max_time_to_use(board: &Board, time_state: &TimeState) -> Option<f64>
 
     // Very rough estimate of how many plies remain
     let remaining_pieces_ratio = (num_pieces as f64) / 32.0;
-    let mut remaining_moves = remaining_pieces_ratio * 40.0 + 6.0;
+    let mut remaining_moves = remaining_pieces_ratio * 30.0 + 14.0;
 
     if time_state.moves_till_time_control.is_some() {
         remaining_moves = f64::min(remaining_moves, time_state.moves_till_time_control.unwrap() as f64);
@@ -46,8 +46,8 @@ pub fn get_max_time_to_use(board: &Board, time_state: &TimeState) -> Option<f64>
 
     let base_time_to_use = real_remaining_time / f64::max(remaining_moves, 1.0);
 
-    // We'll say that the maximum is 1.3x the base time to use
-    let mut max_time_to_use = f64::min(base_time_to_use * 1.3, real_remaining_time);
+    // We'll say that the maximum is 3.5x the base time to use
+    let mut max_time_to_use = f64::min(base_time_to_use * 3.5, real_remaining_time);
 
     // Always leave a little buffer so we don't run out of time
     const TIME_BUFFER: f64 = 0.05;
@@ -67,8 +67,8 @@ pub fn should_exit_early(time_given_to_use: f64, time_used: f64, best_moves: &Ve
 
     let time_remaining = time_given_to_use - time_used;
 
-    if time_remaining > time_given_to_use * 0.90 {
-        // We still have 90% of our time, don't stop
+    if time_remaining > time_given_to_use * 0.95 {
+        // We still have 95% of our time, don't stop
         return false;
     }
 
@@ -85,7 +85,7 @@ pub fn should_exit_early(time_given_to_use: f64, time_used: f64, best_moves: &Ve
     let time_remaining_frac = time_remaining / time_given_to_use;
 
     // Ramp down confidence, so that lower values are even less confident
-    let scaled_confidence = confidence.powf(1.5);
+    let scaled_confidence = confidence.powf(1.2);
 
     if scaled_confidence >= time_remaining_frac {
         // We're confident enough
