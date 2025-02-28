@@ -278,12 +278,19 @@ pub fn generate_moves(board: &Board, out_move_set: &mut MoveBuffer) {
                                 continue; // Can't promote to king lol
                             }
 
+                            let flags;
+                            if (to & board.occupancy[1 - board.turn_idx]) != 0 {
+                                flags = Move::FLAG_PROMOTION | Move::FLAG_CAPTURE;
+                            } else {
+                                flags = Move::FLAG_PROMOTION;
+                            }
+
                             out_move_set.push(Move {
                                 from,
                                 to,
                                 from_piece_idx: PIECE_PAWN,
                                 to_piece_idx,
-                                flags: Move::FLAG_PROMOTION
+                                flags
                             });
                         }
                         continue
