@@ -299,7 +299,8 @@ fn _search(
             // Late move reductions
             if i >= 1 && depth_elapsed >= 2 {
                 let reduction_amount =
-                    ((i as f32) * 0.1 + (depth_remaining as f32) * 0.2) * config.late_move_reduction_factor;
+                    ((i as f32) * 0.1 + (depth_remaining as f32) * 0.2 + (depth_elapsed as f32) * 0.05)
+                        * config.late_move_reduction_factor;
                 depth_reduction_f += reduction_amount;
             }
 
