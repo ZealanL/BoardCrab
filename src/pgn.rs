@@ -1,6 +1,6 @@
 use std::fmt::Write;
-use crate::bitmask::{bm_make_column, bm_make_row, bm_to_coord, bm_to_xy, BitMask};
-use crate::board::{Board, Move, NUM_PIECES, PIECE_CHARS, PIECE_NAMES, PIECE_PAWN};
+use crate::bitmask::*;
+use crate::board::*;
 use crate::move_gen;
 use crate::fen;
 
