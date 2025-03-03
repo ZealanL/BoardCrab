@@ -281,6 +281,14 @@ fn _search(
         }
     }
 
+    if rated_moves.is_empty() {
+        if in_extension {
+            return cur_eval;
+        } else {
+            panic!("No rated moves in non-extension search (this should never happen)")
+        }
+    }
+
     let mut best_move_idx: usize = 0;
     for i in 0..rated_moves.len() {
         let move_idx = rated_moves[i].idx;
